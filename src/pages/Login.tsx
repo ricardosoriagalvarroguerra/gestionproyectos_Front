@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { api, setStoredSession } from "../api/client";
@@ -14,11 +14,6 @@ export function Login() {
   const [userKey, setUserKey] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (userKey || !users.length) return;
-    setUserKey(users[0].user_key);
-  }, [userKey, users]);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
