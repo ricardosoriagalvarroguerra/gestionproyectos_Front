@@ -34,6 +34,12 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
   const [timelineMode, setTimelineMode] = useState<"products" | "tasks">("products");
   const [toast, setToast] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
   const [provisionedUsers, setProvisionedUsers] = useState<SyncProvisionedUser[]>([]);
   const productIdParam = searchParams.get("productId");
   const taskIdParam = searchParams.get("taskId");
@@ -134,7 +140,6 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
       queryClient.invalidateQueries({ queryKey: ["projectTasks", projectId] });
       queryClient.invalidateQueries({ queryKey: ["dashboard", projectId] });
       queryClient.invalidateQueries({ queryKey: ["timeline", projectId] });
-      setTimeout(() => setToast(null), 3000);
     },
     onError: () => setToast("No se pudo sincronizar"),
   });
@@ -147,15 +152,17 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
     if (!selectedProductTasks.length) return;
     const header = ["tarea", "estado", "importancia", "responsable", "fecha_start", "fecha_end"];
     const rows = selectedProductTasks.map((t) => [
-      `"${(t.tarea || "").replace(/"/g, '""')}"`,
+      t.tarea || "",
       t.estado || "",
       t.importancia || "",
       primaryPerson(t.responsable) || "",
       t.fecha_start || "",
       t.fecha_end || "",
     ]);
-    const csv = [header.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    const csv = [header, ...rows]
+      .map((row) => row.map(csvField).join(","))
+      .join("\r\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -178,7 +185,6 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
       });
     } catch (error) {
       setToast("No se pudo generar el PDF");
-      setTimeout(() => setToast(null), 3000);
     } finally {
       setIsExporting(false);
     }
@@ -429,6 +435,12 @@ function projectPeriodLabel(start?: string | null, end?: string | null) {
 
 function primaryPerson(responsable: PersonValue): string | null {
   return personLabel(responsable);
+}
+
+function csvField(value: string): string {
+  const needsQuoting = /[",\r\n]/.test(value);
+  const escaped = value.replace(/"/g, '""');
+  return needsQuoting ? `"${escaped}"` : escaped;
 }
 
 function NotionIcon({ className }: { className?: string }) {

@@ -252,6 +252,9 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
   });
   if (res.status === 401) {
     clearStoredSession();
+    if (typeof window !== "undefined" && window.location.pathname !== "/login") {
+      window.location.replace("/login");
+    }
   }
   if (!res.ok) {
     const detail = await res.text();

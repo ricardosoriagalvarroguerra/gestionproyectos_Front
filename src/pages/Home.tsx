@@ -36,7 +36,7 @@ export function Home() {
             (t.project_nombre || "").toLowerCase().includes(term)
         )
       : alerts;
-    return filteredItems.sort((a, b) => {
+    return [...filteredItems].sort((a, b) => {
       return toTimeValue(a.fecha_end || a.fecha_start) - toTimeValue(b.fecha_end || b.fecha_start);
     });
   }, [alerts, search]);
