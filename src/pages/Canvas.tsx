@@ -359,6 +359,67 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     fg.zoomToFit?.(700, 140);
   };
 
+  // Re-seat all nodes: user nodes on a circle, others around their connected users.
+  // Then reheat the simulation so d3 settles into a clean layout.
+  const reorganize = () => {
+    const fg = graphRef.current;
+    if (!fg) return;
+    const nodes = graphData.nodes;
+    if (nodes.length === 0) return;
+
+    const userNodes = nodes.filter((n) => n.type === "user");
+    const otherNodes = nodes.filter((n) => n.type !== "user");
+    const userCount = Math.max(1, userNodes.length);
+    const ringRadius = Math.max(200, 90 * userCount);
+
+    // Distribute user nodes evenly around a circle.
+    userNodes.forEach((n, i) => {
+      const angle = (2 * Math.PI * i) / userCount - Math.PI / 2;
+      n.x = Math.cos(angle) * ringRadius;
+      n.y = Math.sin(angle) * ringRadius;
+      n.vx = 0;
+      n.vy = 0;
+    });
+
+    const userPosById = new Map<string, { x: number; y: number }>();
+    userNodes.forEach((n) => {
+      if (Number.isFinite(n.x) && Number.isFinite(n.y)) {
+        userPosById.set(n.id, { x: n.x as number, y: n.y as number });
+      }
+    });
+
+    // Place each non-user near the centroid of its connected user nodes.
+    otherNodes.forEach((n) => {
+      const neighbors = adjacency.get(n.id);
+      let sumX = 0;
+      let sumY = 0;
+      let cnt = 0;
+      if (neighbors) {
+        neighbors.forEach((id) => {
+          const p = userPosById.get(id);
+          if (p) {
+            sumX += p.x;
+            sumY += p.y;
+            cnt += 1;
+          }
+        });
+      }
+      const jitter = () => (Math.random() - 0.5) * 100;
+      if (cnt > 0) {
+        n.x = sumX / cnt + jitter();
+        n.y = sumY / cnt + jitter();
+      } else {
+        n.x = (Math.random() - 0.5) * ringRadius * 1.6;
+        n.y = (Math.random() - 0.5) * ringRadius * 1.6;
+      }
+      n.vx = 0;
+      n.vy = 0;
+    });
+
+    fg.d3ReheatSimulation?.();
+    window.setTimeout(() => fg.zoomToFit?.(700, 140), 900);
+  };
+
   return (
     <div className="canvas-shell">
       <aside className={`canvas-sidebar ${sidebarOpen ? "is-open" : "is-closed"}`}>
@@ -489,9 +550,14 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
             <p className="text-[11px] text-secondary leading-5">
               Arrastrá un área vacía para mover el grafo. Scroll para zoom. Drag sobre un nodo para moverlo.
             </p>
-            <button type="button" className="canvas-mini-button" onClick={resetView}>
-              Centrar y ajustar zoom
-            </button>
+            <div className="flex flex-col gap-2">
+              <button type="button" className="canvas-mini-button" onClick={reorganize}>
+                Reorganizar nodos
+              </button>
+              <button type="button" className="canvas-mini-button" onClick={resetView}>
+                Centrar y ajustar zoom
+              </button>
+            </div>
           </div>
 
           <div className="canvas-sidebar-section">
