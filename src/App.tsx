@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { api, AuthUser, clearStoredSession, getStoredSession } from "./api/client";
@@ -7,6 +7,9 @@ import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
 import { Project } from "./pages/Project";
 import { Workload } from "./pages/Workload";
+
+// Code-split the Canvas page (it pulls in react-force-graph-2d ~600KB).
+const Canvas = lazy(() => import("./pages/Canvas").then((m) => ({ default: m.Canvas })));
 
 function App() {
   const location = useLocation();
@@ -18,7 +21,9 @@ function App() {
     ? "Proyecto"
     : location.pathname === "/workload"
       ? "Carga"
-      : "Panel";
+      : location.pathname === "/canvas"
+        ? "Canvas"
+        : "Panel";
   const meQuery = useQuery<AuthUser>({
     queryKey: ["auth", "me"],
     queryFn: api.me,
@@ -96,20 +101,28 @@ function App() {
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            {currentUser?.can_view_workload ? (
+            {currentUser ? (
               <div className="hidden items-center gap-1 rounded-full border border-border-muted bg-panel px-1 py-1 sm:flex">
+                <Link
+                  to="/canvas"
+                  className={`rounded-full px-3 py-1 text-[11px] ${location.pathname === "/canvas" ? "bg-accent text-white" : "text-secondary"}`}
+                >
+                  Canvas
+                </Link>
                 <Link
                   to="/home"
                   className={`rounded-full px-3 py-1 text-[11px] ${location.pathname === "/home" ? "bg-accent text-white" : "text-secondary"}`}
                 >
                   Panel
                 </Link>
-                <Link
-                  to="/workload"
-                  className={`rounded-full px-3 py-1 text-[11px] ${location.pathname === "/workload" ? "bg-accent text-white" : "text-secondary"}`}
-                >
-                  Carga
-                </Link>
+                {currentUser.can_view_workload ? (
+                  <Link
+                    to="/workload"
+                    className={`rounded-full px-3 py-1 text-[11px] ${location.pathname === "/workload" ? "bg-accent text-white" : "text-secondary"}`}
+                  >
+                    Carga
+                  </Link>
+                ) : null}
               </div>
             ) : null}
             {currentUser ? (
@@ -129,6 +142,20 @@ function App() {
             <Routes location={location}>
               <Route path="/login" element={<Login />} />
               <Route path="/home" element={<Home />} />
+              <Route
+                path="/canvas"
+                element={
+                  <Suspense
+                    fallback={
+                      <div className="glass grid min-h-[60vh] place-items-center text-sm text-secondary">
+                        Cargando canvas...
+                      </div>
+                    }
+                  >
+                    <Canvas currentUser={currentUser} />
+                  </Suspense>
+                }
+              />
               <Route path="/project/:projectId" element={<Project currentUser={currentUser} />} />
               <Route
                 path="/workload"

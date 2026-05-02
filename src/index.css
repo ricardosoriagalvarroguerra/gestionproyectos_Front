@@ -2161,3 +2161,33 @@ h3,
     border-radius: 18px;
   }
 }
+
+.canvas-legend {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(20, 22, 28, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+  font-size: 11px;
+  color: rgba(220, 220, 230, 0.9);
+}
+
+.canvas-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.canvas-legend-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
