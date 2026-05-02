@@ -409,13 +409,20 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
       releaseHierarchyLayout();
       if (charge && typeof charge.strength === "function") {
         const n = Math.max(1, graphData.nodes.length);
-        const base = granularity === "tasks" ? -260 : granularity === "products" ? -360 : -450;
-        const scaled = base * Math.min(1.5, Math.max(0.6, 24 / Math.sqrt(n)));
+        // Stronger baseline repulsion so nodes naturally spread further apart.
+        const base = granularity === "tasks" ? -520 : granularity === "products" ? -780 : -1000;
+        // Scale up for sparse graphs and only mildly down for dense ones.
+        const scaled = base * Math.min(2.2, Math.max(0.85, 32 / Math.sqrt(n)));
         charge.strength(scaled);
       }
       if (link && typeof link.distance === "function") {
-        const distance = granularity === "tasks" ? 130 : granularity === "products" ? 180 : 240;
+        const distance = granularity === "tasks" ? 220 : granularity === "products" ? 320 : 420;
         link.distance(distance);
+      }
+      // Lengthen links + soften pull so the layout doesn't snap them too tight.
+      const linkAny = link as unknown as { strength?: (s: number) => unknown };
+      if (linkAny && typeof linkAny.strength === "function") {
+        linkAny.strength(0.35);
       }
     }
 
