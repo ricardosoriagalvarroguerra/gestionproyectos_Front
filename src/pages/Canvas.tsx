@@ -57,9 +57,8 @@ type Palette = {
 const USER_RED = "#c1121f";
 const USER_RED_GLOW = "rgba(193, 18, 31, 0.55)";
 
-// Colors for distinguishing multiple users in multi-user mode.
-// First slot is the canonical "you" red so single-user mode still feels right.
-const USER_PALETTE: { fill: string; glow: string }[] = [
+// Multi-user palette for the DARK theme (saturated, vivid on black bg).
+const USER_PALETTE_DARK: { fill: string; glow: string }[] = [
   { fill: "#c1121f", glow: "rgba(193, 18, 31, 0.55)" },
   { fill: "#2563eb", glow: "rgba(37, 99, 235, 0.5)" },
   { fill: "#16a34a", glow: "rgba(22, 163, 74, 0.5)" },
@@ -70,6 +69,21 @@ const USER_PALETTE: { fill: string; glow: string }[] = [
   { fill: "#65a30d", glow: "rgba(101, 163, 13, 0.5)" },
   { fill: "#7c3aed", glow: "rgba(124, 58, 237, 0.5)" },
   { fill: "#db2777", glow: "rgba(219, 39, 119, 0.5)" },
+];
+
+// Multi-user palette for the LIGHT theme — softer / less saturated tones
+// so they don't shout against the white background.
+const USER_PALETTE_LIGHT: { fill: string; glow: string }[] = [
+  { fill: "#a4133c", glow: "rgba(164, 19, 60, 0.22)" },
+  { fill: "#3b6db8", glow: "rgba(59, 109, 184, 0.22)" },
+  { fill: "#3a7a52", glow: "rgba(58, 122, 82, 0.22)" },
+  { fill: "#a3741c", glow: "rgba(163, 116, 28, 0.22)" },
+  { fill: "#6e4ea5", glow: "rgba(110, 78, 165, 0.22)" },
+  { fill: "#3a7a8c", glow: "rgba(58, 122, 140, 0.22)" },
+  { fill: "#9c4170", glow: "rgba(156, 65, 112, 0.22)" },
+  { fill: "#5b7a3b", glow: "rgba(91, 122, 59, 0.22)" },
+  { fill: "#7355a0", glow: "rgba(115, 85, 160, 0.22)" },
+  { fill: "#a85689", glow: "rgba(168, 86, 137, 0.22)" },
 ];
 
 const DARK_PALETTE: Palette = {
@@ -89,15 +103,17 @@ const DARK_PALETTE: Palette = {
 
 const LIGHT_PALETTE: Palette = {
   background: "#ffffff",
-  user: { fill: USER_RED, glow: USER_RED_GLOW },
-  other: { fill: "#0a0a0a", glow: "rgba(10, 10, 10, 0.28)" },
-  link: "rgba(10, 10, 10, 0.28)",
-  linkDim: "rgba(10, 10, 10, 0.05)",
-  particle: "rgba(10, 10, 10, 0.6)",
-  labelActive: "rgba(10, 10, 10, 0.85)",
-  labelDim: "rgba(82, 82, 91, 0.35)",
-  hoverStroke: "rgba(10, 10, 10, 0.85)",
-  haloStroke: "rgba(217, 119, 6, 0.95)",
+  // Softer rose instead of pure red, less aggressive on white.
+  user: { fill: "#a4133c", glow: "rgba(164, 19, 60, 0.22)" },
+  // Zinc-600 instead of pure black so nodes feel less heavy.
+  other: { fill: "#52525b", glow: "rgba(82, 82, 91, 0.20)" },
+  link: "rgba(82, 82, 91, 0.30)",
+  linkDim: "rgba(82, 82, 91, 0.06)",
+  particle: "rgba(82, 82, 91, 0.55)",
+  labelActive: "rgba(39, 39, 42, 0.92)",
+  labelDim: "rgba(113, 113, 122, 0.42)",
+  hoverStroke: "rgba(63, 63, 70, 0.7)",
+  haloStroke: "rgba(217, 119, 6, 0.7)",
   badgeBg: "#d97706",
   badgeText: "#ffffff",
 };
@@ -226,13 +242,15 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
   }, [sidebarOpen]);
 
   // Color mapping: each selected user gets a stable palette slot in multi mode.
+  // Light theme uses a softer (less saturated) palette than dark.
   const userColorByKey = useMemo<Map<string, { fill: string; glow: string }>>(() => {
     const map = new Map<string, { fill: string; glow: string }>();
+    const palette = resolvedTheme === "light" ? USER_PALETTE_LIGHT : USER_PALETTE_DARK;
     effectiveUserKeys.forEach((key, index) => {
-      map.set(key, USER_PALETTE[index % USER_PALETTE.length]);
+      map.set(key, palette[index % palette.length]);
     });
     return map;
-  }, [effectiveUserKeys]);
+  }, [effectiveUserKeys, resolvedTheme]);
 
   // Raw graph (server data) — without overlap filter applied.
   const baseGraphData = useMemo<GraphData>(() => {
