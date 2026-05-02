@@ -145,11 +145,12 @@ function useResolvedTheme(): ResolvedTheme {
 }
 
 function nodeBaseRadius(node: GraphNode): number {
-  // Visual hierarchy: user (largest) > project > product > task (smallest).
-  if (node.type === "user") return 24;
-  if (node.type === "project") return 13;
-  if (node.type === "product") return 8;
-  return 4.5; // task
+  // Strong visual hierarchy: user >> project >> product >> task.
+  // Ratios approximately user/project=2, project/product=2, product/task=3.
+  if (node.type === "user") return 36;
+  if (node.type === "project") return 18;
+  if (node.type === "product") return 9;
+  return 3; // task
 }
 
 const GRANULARITY_OPTIONS: { value: CanvasGranularity; label: string; help: string }[] = [
@@ -533,12 +534,12 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     const label = node.label || "—";
     const fontSize =
       node.type === "user"
-        ? 15 / globalScale
+        ? 18 / globalScale
         : node.type === "project"
-          ? 11 / globalScale
+          ? 12 / globalScale
           : node.type === "product"
-            ? 9.5 / globalScale
-            : 8 / globalScale; // task
+            ? 9 / globalScale
+            : 7 / globalScale; // task
     ctx.font = `${node.type === "user" ? "700" : node.type === "project" ? "600" : "500"} ${fontSize}px Inter, system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
