@@ -2384,3 +2384,193 @@ h3,
   background: rgba(10, 10, 10, 0.06);
   color: rgba(10, 10, 10, 0.95);
 }
+
+.canvas-segmented {
+  display: inline-flex;
+  align-items: stretch;
+  border-radius: 10px;
+  padding: 3px;
+  gap: 2px;
+  background: rgba(127, 127, 127, 0.08);
+  border: 1px solid var(--border-muted, rgba(255, 255, 255, 0.08));
+  width: 100%;
+}
+
+.canvas-segment {
+  flex: 1 1 0;
+  padding: 6px 10px;
+  border-radius: 7px;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-secondary, rgba(180, 180, 200, 0.7));
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.canvas-segment:hover {
+  color: var(--text-primary, #f0f0f5);
+}
+
+.canvas-segment.is-active {
+  background: rgba(193, 18, 31, 0.18);
+  color: var(--text-primary, #f0f0f5);
+}
+
+.theme-light .canvas-segmented {
+  background: rgba(10, 10, 10, 0.04);
+  border-color: rgba(10, 10, 10, 0.08);
+}
+
+.theme-light .canvas-segment.is-active {
+  background: rgba(193, 18, 31, 0.10);
+  color: rgba(10, 10, 10, 0.92);
+}
+
+/* --------------------- Node detail side panel --------------------- */
+.canvas-detail {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  width: min(340px, calc(100% - 24px));
+  z-index: 6;
+  border-radius: 14px;
+  padding: 16px 16px 18px;
+  background: rgba(20, 22, 28, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: rgba(240, 240, 245, 0.92);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 18px 36px -18px rgba(0, 0, 0, 0.6), 0 4px 14px -6px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  animation: canvas-detail-in 220ms ease;
+  overflow: hidden;
+}
+
+.canvas-detail.is-light {
+  background: rgba(252, 252, 254, 0.96);
+  color: rgba(10, 10, 10, 0.92);
+  border-color: rgba(10, 10, 10, 0.08);
+}
+
+@keyframes canvas-detail-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.canvas-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.canvas-detail-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-secondary, rgba(180, 180, 200, 0.7));
+  margin-bottom: 2px;
+}
+
+.canvas-detail-title {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0;
+  word-break: break-word;
+}
+
+.canvas-detail-close {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  border: 1px solid var(--border-muted, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: background 140ms ease;
+}
+
+.canvas-detail-close:hover {
+  background: rgba(127, 127, 127, 0.18);
+}
+
+.canvas-detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.canvas-detail-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: rgba(127, 127, 127, 0.18);
+  color: var(--text-primary, #f0f0f5);
+}
+
+.canvas-detail-pill.is-shared {
+  background: rgba(250, 204, 21, 0.18);
+  color: #facc15;
+}
+
+.theme-light .canvas-detail-pill.is-shared {
+  background: rgba(217, 119, 6, 0.14);
+  color: #b45309;
+}
+
+.canvas-detail-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.canvas-detail-row-label {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-secondary, rgba(180, 180, 200, 0.7));
+}
+
+.canvas-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.canvas-detail-users {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.canvas-detail-user {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.14);
+  font-size: 11px;
+}
+
+.canvas-detail-cta {
+  margin-top: auto;
+  text-align: center;
+  text-decoration: none;
+}

@@ -11,12 +11,16 @@ import {
   CanvasResponse,
   CanvasUserOption,
 } from "../api/client";
+import { formatDateLabel } from "../utils/display";
 
 type GraphNode = CanvasNode & {
   x?: number;
   y?: number;
   vx?: number;
   vy?: number;
+  fx?: number;
+  fy?: number;
+  shared_user_keys?: string[];
 };
 
 type GraphLink = Omit<CanvasEdge, "source" | "target"> & {
@@ -45,12 +49,28 @@ type Palette = {
   labelDim: string;
   hoverStroke: string;
   linkDim: string;
+  haloStroke: string;
+  badgeBg: string;
+  badgeText: string;
 };
 
-// User: red (#c1121f) in both themes.
-// Other nodes: white in dark, black in light.
 const USER_RED = "#c1121f";
 const USER_RED_GLOW = "rgba(193, 18, 31, 0.55)";
+
+// Colors for distinguishing multiple users in multi-user mode.
+// First slot is the canonical "you" red so single-user mode still feels right.
+const USER_PALETTE: { fill: string; glow: string }[] = [
+  { fill: "#c1121f", glow: "rgba(193, 18, 31, 0.55)" },
+  { fill: "#2563eb", glow: "rgba(37, 99, 235, 0.5)" },
+  { fill: "#16a34a", glow: "rgba(22, 163, 74, 0.5)" },
+  { fill: "#d97706", glow: "rgba(217, 119, 6, 0.5)" },
+  { fill: "#9333ea", glow: "rgba(147, 51, 234, 0.5)" },
+  { fill: "#0891b2", glow: "rgba(8, 145, 178, 0.5)" },
+  { fill: "#be185d", glow: "rgba(190, 24, 93, 0.5)" },
+  { fill: "#65a30d", glow: "rgba(101, 163, 13, 0.5)" },
+  { fill: "#7c3aed", glow: "rgba(124, 58, 237, 0.5)" },
+  { fill: "#db2777", glow: "rgba(219, 39, 119, 0.5)" },
+];
 
 const DARK_PALETTE: Palette = {
   background: "#000000",
@@ -62,6 +82,9 @@ const DARK_PALETTE: Palette = {
   labelActive: "rgba(240, 240, 245, 0.92)",
   labelDim: "rgba(160, 160, 170, 0.32)",
   hoverStroke: "rgba(255, 255, 255, 0.85)",
+  haloStroke: "rgba(255, 220, 0, 0.85)",
+  badgeBg: "#facc15",
+  badgeText: "#0a0a0a",
 };
 
 const LIGHT_PALETTE: Palette = {
@@ -74,6 +97,9 @@ const LIGHT_PALETTE: Palette = {
   labelActive: "rgba(10, 10, 10, 0.85)",
   labelDim: "rgba(82, 82, 91, 0.35)",
   hoverStroke: "rgba(10, 10, 10, 0.85)",
+  haloStroke: "rgba(217, 119, 6, 0.95)",
+  badgeBg: "#d97706",
+  badgeText: "#ffffff",
 };
 
 function resolveThemeFromDom(): ResolvedTheme {
@@ -109,15 +135,24 @@ function nodeBaseRadius(node: GraphNode): number {
   return 5; // task
 }
 
-function nodeColor(node: GraphNode, palette: Palette): { fill: string; glow: string } {
-  if (node.type === "user") return palette.user;
-  return palette.other;
-}
-
 const GRANULARITY_OPTIONS: { value: CanvasGranularity; label: string; help: string }[] = [
   { value: "projects", label: "Solo proyectos", help: "Usuario y proyectos" },
   { value: "products", label: "Proyectos y productos", help: "Hasta nivel de productos" },
   { value: "tasks", label: "Proyectos, productos y tareas", help: "Vista completa" },
+];
+
+type LayoutMode = "constellation" | "hierarchy";
+type OverlapFilter = "all" | "shared" | "exclusive";
+
+const OVERLAP_OPTIONS: { value: OverlapFilter; label: string; help: string }[] = [
+  { value: "all", label: "Todo", help: "Mostrar todos los nodos visibles" },
+  { value: "shared", label: "Solo compartidos", help: "Items conectados a 2+ usuarios" },
+  { value: "exclusive", label: "Solo exclusivos", help: "Items conectados a un solo usuario" },
+];
+
+const LAYOUT_OPTIONS: { value: LayoutMode; label: string }[] = [
+  { value: "constellation", label: "Constelación" },
+  { value: "hierarchy", label: "Jerarquía" },
 ];
 
 export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
@@ -125,17 +160,18 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
   const graphRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(undefined);
   const [dimensions, setDimensions] = useState<{ w: number; h: number }>({ w: 800, h: 600 });
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  // Selected user keys: single-user (length 1) is the default; admins can pick many.
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedUserKeys, setSelectedUserKeys] = useState<string[]>([]);
   const [granularity, setGranularity] = useState<CanvasGranularity>("products");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [overlapFilter, setOverlapFilter] = useState<OverlapFilter>("all");
+  const [layoutMode, setLayoutMode] = useState<LayoutMode>("constellation");
 
   const resolvedTheme = useResolvedTheme();
   const palette = resolvedTheme === "light" ? LIGHT_PALETTE : DARK_PALETTE;
 
   const isAdmin = !!currentUser?.can_view_all;
 
-  // Default to the current user when nothing is picked.
   const effectiveUserKeys = useMemo<string[]>(() => {
     if (selectedUserKeys.length > 0) return selectedUserKeys;
     return currentUser?.user_key ? [currentUser.user_key] : [];
@@ -179,18 +215,27 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     };
   }, []);
 
-  // Re-measure when sidebar collapses/expands so the graph fills the new width.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const t = window.setTimeout(() => {
       const rect = el.getBoundingClientRect();
       setDimensions({ w: Math.max(320, rect.width), h: Math.max(360, rect.height) });
-    }, 320); // wait for the CSS transition
+    }, 320);
     return () => window.clearTimeout(t);
   }, [sidebarOpen]);
 
-  const graphData = useMemo<GraphData>(() => {
+  // Color mapping: each selected user gets a stable palette slot in multi mode.
+  const userColorByKey = useMemo<Map<string, { fill: string; glow: string }>>(() => {
+    const map = new Map<string, { fill: string; glow: string }>();
+    effectiveUserKeys.forEach((key, index) => {
+      map.set(key, USER_PALETTE[index % USER_PALETTE.length]);
+    });
+    return map;
+  }, [effectiveUserKeys]);
+
+  // Raw graph (server data) — without overlap filter applied.
+  const baseGraphData = useMemo<GraphData>(() => {
     const data = canvasQuery.data;
     if (!data) return { nodes: [], links: [] };
     return {
@@ -199,6 +244,68 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     };
   }, [canvasQuery.data]);
 
+  // Adjacency on the raw data (used for shared count and click panel).
+  const baseAdjacency = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    baseGraphData.links.forEach((link) => {
+      const s = nodeId(link.source);
+      const t = nodeId(link.target);
+      if (!map.has(s)) map.set(s, new Set());
+      if (!map.has(t)) map.set(t, new Set());
+      map.get(s)!.add(t);
+      map.get(t)!.add(s);
+    });
+    return map;
+  }, [baseGraphData]);
+
+  // Set of user node ids in the graph.
+  const userNodeIds = useMemo(() => {
+    return new Set(baseGraphData.nodes.filter((n) => n.type === "user").map((n) => n.id));
+  }, [baseGraphData]);
+
+  // For each non-user node, count how many user nodes it's connected to.
+  const sharedCountById = useMemo(() => {
+    const counts = new Map<string, number>();
+    baseGraphData.nodes.forEach((node) => {
+      if (node.type === "user") return;
+      const neighbors = baseAdjacency.get(node.id);
+      if (!neighbors) {
+        counts.set(node.id, 0);
+        return;
+      }
+      let cnt = 0;
+      neighbors.forEach((id) => {
+        if (userNodeIds.has(id)) cnt += 1;
+      });
+      counts.set(node.id, cnt);
+    });
+    return counts;
+  }, [baseGraphData, baseAdjacency, userNodeIds]);
+
+  // Apply the overlap filter to the graph data.
+  const graphData = useMemo<GraphData>(() => {
+    if (overlapFilter === "all" || !isMulti) return baseGraphData;
+
+    const visibleIds = new Set<string>();
+    baseGraphData.nodes.forEach((node) => {
+      if (node.type === "user") {
+        visibleIds.add(node.id); // always keep users for context
+        return;
+      }
+      const cnt = sharedCountById.get(node.id) ?? 0;
+      if (overlapFilter === "shared" && cnt >= 2) visibleIds.add(node.id);
+      if (overlapFilter === "exclusive" && cnt <= 1) visibleIds.add(node.id);
+    });
+
+    return {
+      nodes: baseGraphData.nodes.filter((n) => visibleIds.has(n.id)),
+      links: baseGraphData.links.filter(
+        (l) => visibleIds.has(nodeId(l.source)) && visibleIds.has(nodeId(l.target))
+      ),
+    };
+  }, [baseGraphData, sharedCountById, overlapFilter, isMulti]);
+
+  // Adjacency for the visible (filtered) graph — used for hover focus.
   const adjacency = useMemo(() => {
     const map = new Map<string, Set<string>>();
     graphData.links.forEach((link) => {
@@ -223,43 +330,90 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     return nodeId(link.source) === hoveredId || nodeId(link.target) === hoveredId;
   };
 
-  // Tune force layout so nodes spread out without flying off the viewport.
+  // Pin nodes in concentric rings for hierarchy mode, release for constellation.
+  const applyHierarchyLayout = () => {
+    const nodes = graphData.nodes;
+    if (nodes.length === 0) return;
+
+    const place = (arr: GraphNode[], radius: number, offset = 0) => {
+      const len = Math.max(1, arr.length);
+      arr.forEach((n, i) => {
+        const angle = (2 * Math.PI * i) / len - Math.PI / 2 + offset;
+        const fx = Math.cos(angle) * radius;
+        const fy = Math.sin(angle) * radius;
+        n.fx = fx;
+        n.fy = fy;
+        n.x = fx;
+        n.y = fy;
+        n.vx = 0;
+        n.vy = 0;
+      });
+    };
+
+    const users = nodes.filter((n) => n.type === "user");
+    const tasks = nodes.filter((n) => n.type === "task");
+    const products = nodes.filter((n) => n.type === "product");
+    const projects = nodes.filter((n) => n.type === "project");
+
+    // Tasks at the inner ring, products mid, projects outer; users in the very center.
+    const userRadius = users.length > 1 ? 50 : 0;
+    place(users, userRadius);
+    if (tasks.length > 0) place(tasks, 170, 0.1);
+    if (products.length > 0) place(products, 320, 0.05);
+    if (projects.length > 0) place(projects, 480);
+  };
+
+  const releaseHierarchyLayout = () => {
+    graphData.nodes.forEach((n) => {
+      delete n.fx;
+      delete n.fy;
+    });
+  };
+
+  // Tune force layout based on mode + density.
   useEffect(() => {
     const fg = graphRef.current;
     if (!fg) return;
+
     type Adjustable = {
       strength?: (s: number) => unknown;
       distance?: (d: number) => unknown;
     };
     const charge = fg.d3Force("charge") as unknown as Adjustable | undefined;
-    if (charge && typeof charge.strength === "function") {
-      // Strength scales inversely with node count so dense graphs don't blow up.
-      const n = Math.max(1, graphData.nodes.length);
-      const base = granularity === "tasks" ? -260 : granularity === "products" ? -360 : -450;
-      const scaled = base * Math.min(1.5, Math.max(0.6, 24 / Math.sqrt(n)));
-      charge.strength(scaled);
-    }
     const link = fg.d3Force("link") as unknown as Adjustable | undefined;
-    if (link && typeof link.distance === "function") {
-      const distance = granularity === "tasks" ? 130 : granularity === "products" ? 180 : 240;
-      link.distance(distance);
+
+    if (layoutMode === "hierarchy") {
+      // Soft forces, mostly the rings hold positions because nodes are pinned.
+      if (charge && typeof charge.strength === "function") charge.strength(-30);
+      if (link && typeof link.distance === "function") link.distance(60);
+      applyHierarchyLayout();
+    } else {
+      releaseHierarchyLayout();
+      if (charge && typeof charge.strength === "function") {
+        const n = Math.max(1, graphData.nodes.length);
+        const base = granularity === "tasks" ? -260 : granularity === "products" ? -360 : -450;
+        const scaled = base * Math.min(1.5, Math.max(0.6, 24 / Math.sqrt(n)));
+        charge.strength(scaled);
+      }
+      if (link && typeof link.distance === "function") {
+        const distance = granularity === "tasks" ? 130 : granularity === "products" ? 180 : 240;
+        link.distance(distance);
+      }
     }
+
     if (graphData.nodes.length > 0) {
       fg.d3ReheatSimulation?.();
-      const t = window.setTimeout(() => fg.zoomToFit?.(700, 140), 200);
+      const t = window.setTimeout(() => fg.zoomToFit?.(700, 140), 250);
       return () => window.clearTimeout(t);
     }
-  }, [graphData.nodes.length, granularity]);
+  }, [graphData.nodes.length, granularity, layoutMode, overlapFilter]);
 
   const handleNodeClick = (node: GraphNode) => {
-    if (node.notion_url) {
-      window.open(node.notion_url, "_blank", "noopener,noreferrer");
-      return;
-    }
+    // Open detail panel inline; the panel has its own "Abrir en Notion" button.
+    setSelectedNodeId(node.id);
     const fg = graphRef.current;
-    if (fg && typeof node.x === "number" && typeof node.y === "number") {
-      fg.centerAt(node.x, node.y, 600);
-      fg.zoom(2.5, 600);
+    if (fg && Number.isFinite(node.x) && Number.isFinite(node.y)) {
+      fg.centerAt(node.x as number, node.y as number, 600);
     }
   };
 
@@ -268,15 +422,29 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     ctx: CanvasRenderingContext2D,
     globalScale: number
   ) => {
-    // Skip nodes whose coords haven't been initialized (NaN/Infinity/undefined).
     if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
     const x = node.x as number;
     const y = node.y as number;
     const baseRadius = nodeBaseRadius(node);
     const focused = isFocused(node.id);
     const isHover = hoveredId === node.id;
-    const radius = baseRadius * (isHover ? 1.25 : 1);
-    const colors = nodeColor(node, palette);
+    const isSelected = selectedNodeId === node.id;
+    const radius = baseRadius * (isHover || isSelected ? 1.25 : 1);
+
+    // Pick color — multi-user mode colors user nodes by palette.
+    let colors: { fill: string; glow: string };
+    if (node.type === "user") {
+      if (isMulti && node.user_key) {
+        colors = userColorByKey.get(node.user_key) || palette.user;
+      } else {
+        colors = palette.user;
+      }
+    } else {
+      colors = palette.other;
+    }
+
+    const sharedCount = sharedCountById.get(node.id) ?? 0;
+    const isShared = node.type !== "user" && sharedCount >= 2;
     const alpha = focused ? 1 : 0.18;
 
     if (focused) {
@@ -294,13 +462,42 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
     ctx.fillStyle = colors.fill;
     ctx.fill();
-    if (isHover) {
+
+    // Halo ring for shared items.
+    if (isShared) {
+      ctx.lineWidth = 2 / globalScale;
+      ctx.strokeStyle = palette.haloStroke;
+      ctx.beginPath();
+      ctx.arc(x, y, radius + 3 / globalScale, 0, 2 * Math.PI, false);
+      ctx.stroke();
+    }
+
+    if (isHover || isSelected) {
       ctx.lineWidth = 2 / globalScale;
       ctx.strokeStyle = palette.hoverStroke;
+      ctx.beginPath();
+      ctx.arc(x, y, radius + 1 / globalScale, 0, 2 * Math.PI, false);
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
 
+    // Badge with shared count for shared items.
+    if (isShared) {
+      const badgeRadius = 7 / globalScale;
+      const bx = x + radius * 0.95;
+      const by = y - radius * 0.95;
+      ctx.beginPath();
+      ctx.arc(bx, by, badgeRadius, 0, 2 * Math.PI, false);
+      ctx.fillStyle = palette.badgeBg;
+      ctx.fill();
+      ctx.fillStyle = palette.badgeText;
+      ctx.font = `700 ${Math.max(8, 9 / globalScale)}px Inter, system-ui, sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(String(sharedCount), bx, by + 0.5 / globalScale);
+    }
+
+    // Label
     const label = node.label || "—";
     const fontSize =
       node.type === "user" ? 13 / globalScale : node.type === "task" ? 9 / globalScale : 10 / globalScale;
@@ -313,11 +510,25 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
   };
 
   const linkColor = (link: GraphLink): string => {
+    // In multi mode, user-origin links carry the user's palette color.
+    if (isMulti && (link.kind === "user_project" || link.kind === "user_product" || link.kind === "user_task")) {
+      const sourceId = nodeId(link.source);
+      // user_project edges have source=user, target=project. Find user_key from id.
+      const sourceNode = baseGraphData.nodes.find((n) => n.id === sourceId);
+      const userKey = sourceNode?.user_key;
+      if (userKey) {
+        const c = userColorByKey.get(userKey);
+        if (c) {
+          if (!hoveredId) return withAlpha(c.fill, 0.55);
+          return isLinkActive(link) ? withAlpha(c.fill, 0.7) : withAlpha(c.fill, 0.06);
+        }
+      }
+    }
     if (!hoveredId) return palette.link;
     return isLinkActive(link) ? palette.link : palette.linkDim;
   };
 
-  const linkWidth = (link: GraphLink): number => (isLinkActive(link) ? 1.4 : 0.5);
+  const linkWidth = (link: GraphLink): number => (isLinkActive(link) ? 1.6 : 0.6);
 
   const handleNodeHover = (node: GraphNode | null) => {
     setHoveredId(node ? node.id : null);
@@ -342,11 +553,8 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
   const toggleUserSelection = (userKey: string) => {
     setSelectedUserKeys((prev) => {
       const next = new Set(prev.length > 0 ? prev : currentUser?.user_key ? [currentUser.user_key] : []);
-      if (next.has(userKey)) {
-        next.delete(userKey);
-      } else {
-        next.add(userKey);
-      }
+      if (next.has(userKey)) next.delete(userKey);
+      else next.add(userKey);
       return Array.from(next);
     });
   };
@@ -359,8 +567,6 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     fg.zoomToFit?.(700, 140);
   };
 
-  // Re-seat all nodes: user nodes on a circle, others around their connected users.
-  // Then reheat the simulation so d3 settles into a clean layout.
   const reorganize = () => {
     const fg = graphRef.current;
     if (!fg) return;
@@ -372,7 +578,6 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     const userCount = Math.max(1, userNodes.length);
     const ringRadius = Math.max(200, 90 * userCount);
 
-    // Distribute user nodes evenly around a circle.
     userNodes.forEach((n, i) => {
       const angle = (2 * Math.PI * i) / userCount - Math.PI / 2;
       n.x = Math.cos(angle) * ringRadius;
@@ -388,7 +593,6 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
       }
     });
 
-    // Place each non-user near the centroid of its connected user nodes.
     otherNodes.forEach((n) => {
       const neighbors = adjacency.get(n.id);
       let sumX = 0;
@@ -420,6 +624,28 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     window.setTimeout(() => fg.zoomToFit?.(700, 140), 900);
   };
 
+  const selectedNode = useMemo(
+    () => baseGraphData.nodes.find((n) => n.id === selectedNodeId) || null,
+    [baseGraphData, selectedNodeId]
+  );
+
+  const selectedNodeUsers = useMemo<{ user_key: string; display_name: string; color: string }[]>(() => {
+    if (!selectedNode || selectedNode.type === "user") return [];
+    const neighbors = baseAdjacency.get(selectedNode.id);
+    if (!neighbors) return [];
+    const result: { user_key: string; display_name: string; color: string }[] = [];
+    baseGraphData.nodes.forEach((n) => {
+      if (n.type !== "user" || !neighbors.has(n.id) || !n.user_key) return;
+      const color = (isMulti ? userColorByKey.get(n.user_key)?.fill : palette.user.fill) || palette.user.fill;
+      result.push({
+        user_key: n.user_key,
+        display_name: n.label,
+        color,
+      });
+    });
+    return result;
+  }, [selectedNode, baseGraphData, baseAdjacency, isMulti, userColorByKey, palette]);
+
   return (
     <div className="canvas-shell">
       <aside className={`canvas-sidebar ${sidebarOpen ? "is-open" : "is-closed"}`}>
@@ -431,7 +657,7 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
 
           <p className="text-[12px] leading-5 text-secondary">
             Grafo estilo Obsidian: tu nodo central conectado a proyectos, productos y tareas.
-            Hover para resaltar conexiones, click para abrir en Notion, drag para reordenar.
+            Hover para resaltar conexiones, click para abrir un panel con detalles, drag para reordenar.
           </p>
 
           <div className="canvas-sidebar-section">
@@ -472,36 +698,29 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
               </div>
               <div className="canvas-user-list">
                 {currentUser ? (
-                  <label
-                    className={`canvas-user-row ${effectiveUserKeys.includes(currentUser.user_key) ? "is-active" : ""}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={effectiveUserKeys.includes(currentUser.user_key)}
-                      onChange={() => toggleUserSelection(currentUser.user_key)}
-                    />
-                    <span className="truncate">{currentUser.display_name} (yo)</span>
-                  </label>
+                  <UserRow
+                    label={`${currentUser.display_name} (yo)`}
+                    checked={effectiveUserKeys.includes(currentUser.user_key)}
+                    color={
+                      isMulti
+                        ? userColorByKey.get(currentUser.user_key)?.fill
+                        : palette.user.fill
+                    }
+                    onChange={() => toggleUserSelection(currentUser.user_key)}
+                  />
                 ) : null}
                 {allUserOptions
                   .filter((u) => u.user_key !== currentUser?.user_key)
                   .map((user) => {
                     const checked = effectiveUserKeys.includes(user.user_key);
                     return (
-                      <label
+                      <UserRow
                         key={user.user_key}
-                        className={`canvas-user-row ${checked ? "is-active" : ""}`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleUserSelection(user.user_key)}
-                        />
-                        <span className="truncate">
-                          {user.display_name}
-                          {user.can_view_all ? <span className="text-secondary"> · admin</span> : null}
-                        </span>
-                      </label>
+                        label={`${user.display_name}${user.can_view_all ? " · admin" : ""}`}
+                        checked={checked}
+                        color={isMulti ? userColorByKey.get(user.user_key)?.fill : undefined}
+                        onChange={() => toggleUserSelection(user.user_key)}
+                      />
                     );
                   })}
               </div>
@@ -510,6 +729,51 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
               </p>
             </div>
           ) : null}
+
+          {isMulti ? (
+            <div className="canvas-sidebar-section">
+              <div className="canvas-sidebar-heading">Filtro de superposición</div>
+              <div className="canvas-granularity">
+                {OVERLAP_OPTIONS.map((opt) => (
+                  <label
+                    key={opt.value}
+                    className={`canvas-granularity-option ${overlapFilter === opt.value ? "is-active" : ""}`}
+                    title={opt.help}
+                  >
+                    <input
+                      type="radio"
+                      name="canvas-overlap"
+                      value={opt.value}
+                      checked={overlapFilter === opt.value}
+                      onChange={() => setOverlapFilter(opt.value)}
+                    />
+                    <span>{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="canvas-sidebar-section">
+            <div className="canvas-sidebar-heading">Disposición</div>
+            <div className="canvas-segmented">
+              {LAYOUT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={`canvas-segment ${layoutMode === opt.value ? "is-active" : ""}`}
+                  onClick={() => setLayoutMode(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-[10px] text-secondary">
+              {layoutMode === "constellation"
+                ? "Force-directed orgánico (default)."
+                : "Anillos concéntricos: tareas centro · productos medio · proyectos exterior."}
+            </p>
+          </div>
 
           <div className="canvas-sidebar-section">
             <div className="canvas-sidebar-heading">Resumen</div>
@@ -571,6 +835,19 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
                 <span className="canvas-legend-dot" style={{ background: palette.other.fill }} />
                 Proyecto / Producto / Tarea
               </span>
+              {isMulti ? (
+                <span className="canvas-legend-item">
+                  <span
+                    className="canvas-legend-dot"
+                    style={{
+                      background: "transparent",
+                      border: `2px solid ${palette.haloStroke}`,
+                      boxShadow: `0 0 0 2px ${palette.badgeBg} inset`,
+                    }}
+                  />
+                  Compartido (2+)
+                </span>
+              ) : null}
             </div>
           </div>
         </div>
@@ -626,12 +903,10 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
               nodeCanvasObject={drawNode}
               nodeCanvasObjectMode={() => "replace"}
               nodePointerAreaPaint={(node, color, ctx) => {
-                const x = node.x;
-                const y = node.y;
-                if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+                if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
                 ctx.fillStyle = color;
                 ctx.beginPath();
-                ctx.arc(x as number, y as number, nodeBaseRadius(node) + 4, 0, 2 * Math.PI, false);
+                ctx.arc(node.x as number, node.y as number, nodeBaseRadius(node) + 4, 0, 2 * Math.PI, false);
                 ctx.fill();
               }}
               linkColor={linkColor}
@@ -642,14 +917,146 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
               linkDirectionalParticleColor={() => palette.particle}
               onNodeHover={handleNodeHover}
               onNodeClick={handleNodeClick}
-              onBackgroundClick={() => setHoveredId(null)}
+              onBackgroundClick={() => {
+                setHoveredId(null);
+                setSelectedNodeId(null);
+              }}
               enableZoomInteraction
               enablePanInteraction
               enableNodeDrag
             />
           )}
         </div>
+
+        {selectedNode ? (
+          <NodeDetailPanel
+            node={selectedNode}
+            connectedUsers={selectedNodeUsers}
+            sharedCount={sharedCountById.get(selectedNode.id) ?? 0}
+            onClose={() => setSelectedNodeId(null)}
+            theme={resolvedTheme}
+          />
+        ) : null}
       </section>
     </div>
   );
+}
+
+function UserRow({
+  label,
+  checked,
+  color,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  color?: string;
+  onChange: () => void;
+}) {
+  return (
+    <label className={`canvas-user-row ${checked ? "is-active" : ""}`}>
+      <input type="checkbox" checked={checked} onChange={onChange} />
+      {color ? (
+        <span className="canvas-legend-dot" style={{ background: color, flex: "0 0 auto" }} />
+      ) : null}
+      <span className="truncate">{label}</span>
+    </label>
+  );
+}
+
+function NodeDetailPanel({
+  node,
+  connectedUsers,
+  sharedCount,
+  onClose,
+  theme,
+}: {
+  node: GraphNode;
+  connectedUsers: { user_key: string; display_name: string; color: string }[];
+  sharedCount: number;
+  onClose: () => void;
+  theme: ResolvedTheme;
+}) {
+  const typeLabel =
+    node.type === "user" ? "Usuario"
+      : node.type === "project" ? "Proyecto"
+        : node.type === "product" ? "Producto"
+          : "Tarea";
+
+  const fechaStart = node.fecha_start || node.fecha_entrega_start || null;
+  const fechaEnd = node.fecha_end || node.fecha_entrega_end || null;
+
+  return (
+    <div className={`canvas-detail ${theme === "light" ? "is-light" : ""}`}>
+      <div className="canvas-detail-header">
+        <div className="min-w-0">
+          <div className="canvas-detail-eyebrow">{typeLabel}</div>
+          <h3 className="canvas-detail-title">{node.label || "—"}</h3>
+        </div>
+        <button type="button" className="canvas-detail-close" onClick={onClose} aria-label="Cerrar">
+          ×
+        </button>
+      </div>
+
+      {node.type !== "user" ? (
+        <div className="canvas-detail-meta">
+          {node.estado ? (
+            <span className="canvas-detail-pill">{node.estado}</span>
+          ) : null}
+          {sharedCount >= 2 ? (
+            <span className="canvas-detail-pill is-shared">Compartido por {sharedCount}</span>
+          ) : null}
+        </div>
+      ) : null}
+
+      {(fechaStart || fechaEnd) ? (
+        <div className="canvas-detail-row">
+          <span className="canvas-detail-row-label">Fechas</span>
+          <span>
+            {formatDateLabel(fechaStart, "—")} – {formatDateLabel(fechaEnd, "—")}
+          </span>
+        </div>
+      ) : null}
+
+      {connectedUsers.length > 0 ? (
+        <div className="canvas-detail-section">
+          <div className="canvas-detail-row-label">
+            {connectedUsers.length === 1 ? "Visible para" : "Compartido entre"}
+          </div>
+          <div className="canvas-detail-users">
+            {connectedUsers.map((u) => (
+              <span key={u.user_key} className="canvas-detail-user">
+                <span className="canvas-legend-dot" style={{ background: u.color }} />
+                {u.display_name}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {node.notion_url ? (
+        <a
+          href={node.notion_url}
+          target="_blank"
+          rel="noreferrer"
+          className="canvas-mini-button canvas-detail-cta"
+        >
+          Abrir en Notion ↗
+        </a>
+      ) : null}
+    </div>
+  );
+}
+
+// helpers ---------------------------------------------------------------------
+
+function withAlpha(hex: string, alpha: number): string {
+  // Accept #rrggbb or rgba(...) — for simplicity convert hex into rgba.
+  if (hex.startsWith("#") && hex.length === 7) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  return hex;
 }
