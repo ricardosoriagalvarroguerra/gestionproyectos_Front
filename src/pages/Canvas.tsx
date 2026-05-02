@@ -409,20 +409,26 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
       releaseHierarchyLayout();
       if (charge && typeof charge.strength === "function") {
         const n = Math.max(1, graphData.nodes.length);
-        // Stronger baseline repulsion so nodes naturally spread further apart.
-        const base = granularity === "tasks" ? -520 : granularity === "products" ? -780 : -1000;
-        // Scale up for sparse graphs and only mildly down for dense ones.
-        const scaled = base * Math.min(2.2, Math.max(0.85, 32 / Math.sqrt(n)));
+        // Aggressive baseline repulsion — nodes get a lot of personal space.
+        const base = granularity === "tasks" ? -1400 : granularity === "products" ? -2200 : -3000;
+        // Scale up sparse graphs even more; dense ones stay close to baseline.
+        const scaled = base * Math.min(2.5, Math.max(0.9, 40 / Math.sqrt(n)));
         charge.strength(scaled);
       }
+      // Optional theta tweak for finer-grained repulsion calculation in dense graphs.
+      const chargeAny = charge as unknown as { theta?: (t: number) => unknown; distanceMax?: (d: number) => unknown };
+      if (chargeAny && typeof chargeAny.distanceMax === "function") {
+        // Let charge act over a bigger radius so far nodes still feel some push.
+        chargeAny.distanceMax(2400);
+      }
       if (link && typeof link.distance === "function") {
-        const distance = granularity === "tasks" ? 220 : granularity === "products" ? 320 : 420;
+        const distance = granularity === "tasks" ? 380 : granularity === "products" ? 560 : 720;
         link.distance(distance);
       }
-      // Lengthen links + soften pull so the layout doesn't snap them too tight.
       const linkAny = link as unknown as { strength?: (s: number) => unknown };
       if (linkAny && typeof linkAny.strength === "function") {
-        linkAny.strength(0.35);
+        // Even softer pull so the long distances aren't snapped back.
+        linkAny.strength(0.18);
       }
     }
 
@@ -917,13 +923,13 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
               width={dimensions.w}
               height={dimensions.h}
               backgroundColor={palette.background}
-              cooldownTicks={150}
-              cooldownTime={6000}
-              d3AlphaDecay={0.035}
-              d3VelocityDecay={0.5}
-              warmupTicks={20}
+              cooldownTicks={250}
+              cooldownTime={10000}
+              d3AlphaDecay={0.022}
+              d3VelocityDecay={0.42}
+              warmupTicks={40}
               nodeRelSize={6}
-              minZoom={0.2}
+              minZoom={0.08}
               maxZoom={6}
               nodeCanvasObject={drawNode}
               nodeCanvasObjectMode={() => "replace"}
