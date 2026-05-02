@@ -98,7 +98,7 @@ export function ProductsTable({ products, selectedId, onSelect, filters, onChang
         </label>
       </div>
       <div className="max-h-[360px] overflow-auto scrollbar-thin pdf-expand">
-        <table className="ui-table w-full text-[13px]">
+        <table className="ui-table min-w-[980px] w-full text-[13px]">
           <thead className="sticky top-0 z-10">
             <tr className="text-left">
               <th className="px-3 py-2">Producto</th>

@@ -129,7 +129,7 @@ export function TasksByProduct({ tasks, products, filters, onChangeFilters }: Pr
               <span>{group.label}</span>
               <span className="ui-badge">{group.tasks.length} tareas</span>
             </div>
-            <table className="ui-table w-full text-[13px]">
+            <table className="ui-table min-w-[920px] w-full text-[13px]">
               <thead className="sticky top-0 z-10">
                 <tr>
                   <th className="px-3 py-2 text-left">Tarea</th>

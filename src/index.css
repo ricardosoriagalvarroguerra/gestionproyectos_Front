@@ -145,8 +145,13 @@ body {
   margin: 0;
   color: var(--text-primary);
   font-family: var(--font-body);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   background: var(--bg-surface);
+}
+
+.app-viewport {
+  height: 100vh;
+  height: 100dvh;
 }
 
 .theme-dark body {
@@ -279,6 +284,7 @@ h3,
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .ui-button:hover:not(:disabled) {
@@ -476,6 +482,8 @@ h3,
 .ui-select {
   min-height: 42px;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--border-muted);
   border-radius: 10px;
   background: var(--bg-muted);
@@ -539,6 +547,7 @@ h3,
 
 .panel-header {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
@@ -611,6 +620,7 @@ h3,
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  max-width: 100%;
   min-height: 24px;
   padding: 0 9px;
   border-radius: 999px;
@@ -827,6 +837,7 @@ h3,
   border-collapse: separate;
   border-spacing: 0;
   font-size: 13px;
+  table-layout: auto;
 }
 
 .ui-table thead th {
@@ -1013,7 +1024,7 @@ h3,
 .wl-scroll {
   overflow-x: auto;
   overflow-y: auto;
-  max-height: 70vh;
+  max-height: min(70vh, 760px);
 }
 .wl-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
 .wl-scroll::-webkit-scrollbar-thumb {
@@ -1023,6 +1034,7 @@ h3,
 
 .wl-table {
   width: 100%;
+  min-width: max-content;
   border-collapse: separate;
   border-spacing: 0;
 }
@@ -1038,6 +1050,10 @@ h3,
 }
 .wl-th--user {
   text-align: left;
+  position: sticky;
+  left: 0;
+  z-index: 12;
+  background: var(--bg-panel);
   padding-left: 16px;
   min-width: 200px;
   font-size: 11px;
@@ -1133,6 +1149,10 @@ h3,
   vertical-align: middle;
 }
 .wl-td--user {
+  position: sticky;
+  left: 0;
+  z-index: 8;
+  background: var(--bg-panel);
   padding-left: 16px;
   padding-right: 12px;
 }
@@ -1763,6 +1783,7 @@ h3,
 .timeline-board {
   position: relative;
   min-width: max-content;
+  width: 100%;
 }
 
 .timeline-left-track {
@@ -2033,11 +2054,11 @@ h3,
   page-break-inside: avoid;
 }
 
-.pdf-expand {
+.pdf-exporting .pdf-expand {
   max-height: none !important;
 }
 
-.pdf-expand-x {
+.pdf-exporting .pdf-expand-x {
   overflow: visible !important;
 }
 

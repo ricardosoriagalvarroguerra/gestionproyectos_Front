@@ -512,7 +512,7 @@ function MonthGrid({
         const headerRowHeight = 24;
         const rowHeight = 72;
         const rowTemplate = `${headerRowHeight}px ${headerRowHeight}px repeat(${view.rows.length}, ${rowHeight}px)`;
-        const boardTemplate = `${leftWidth}px 10px repeat(${view.weeks.length}, minmax(0, 1fr))`;
+        const boardTemplate = `${leftWidth}px 10px repeat(${view.weeks.length}, minmax(${view.cellMinWidth}px, 1fr))`;
         const weekStartColumn = 3;
         const rowStartIndex = 3;
         return (

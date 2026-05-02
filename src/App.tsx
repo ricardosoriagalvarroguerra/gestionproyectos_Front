@@ -48,7 +48,7 @@ function App() {
 
   if (hasSession && meQuery.isLoading && !currentUser) {
     return (
-      <div className="h-screen overflow-hidden bg-surface text-primary flex items-center justify-center">
+      <div className="app-viewport overflow-hidden bg-surface text-primary flex items-center justify-center">
         <div className="glass px-6 py-5 text-sm text-secondary">Validando acceso...</div>
       </div>
     );
@@ -67,7 +67,7 @@ function App() {
 
   if (isLogin) {
     return (
-      <div className="h-screen overflow-hidden bg-surface text-primary">
+      <div className="app-viewport overflow-hidden bg-surface text-primary">
         <div className="flex h-full w-full items-center justify-center px-4 py-6 sm:px-6">
           <div key={location.pathname} className="page-transition flex h-full w-full items-center justify-center">
             <Routes location={location}>
@@ -81,9 +81,9 @@ function App() {
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-surface text-primary">
-      <div className="mx-auto flex h-full w-full max-w-[1520px] flex-col px-3 pb-3 pt-3 sm:px-5 sm:pb-5 sm:pt-4">
-        <header className="app-header flex h-14 items-center justify-between px-4 sm:px-5">
+    <div className="app-viewport overflow-hidden bg-surface text-primary">
+      <div className="mx-auto flex h-full w-full max-w-[1800px] flex-col px-3 pb-3 pt-3 sm:px-5 sm:pb-5 sm:pt-4">
+        <header className="app-header flex min-h-14 items-center justify-between gap-3 px-3 py-2 sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <div className="app-logo grid h-8 w-8 place-items-center text-[11px] font-semibold">VPF</div>
             <div className="min-w-0">
@@ -95,7 +95,7 @@ function App() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
             {currentUser?.can_view_workload ? (
               <div className="hidden items-center gap-1 rounded-full border border-border-muted bg-panel px-1 py-1 sm:flex">
                 <Link

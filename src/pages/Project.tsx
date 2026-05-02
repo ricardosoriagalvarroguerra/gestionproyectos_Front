@@ -226,7 +226,7 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
                 <span>Detalle</span>
               </div>
               <div className="space-y-2">
-                <h1 className="truncate text-[34px] leading-[0.98] font-semibold sm:text-[42px]">
+                <h1 className="max-w-5xl break-words text-[34px] leading-[1.02] font-semibold sm:text-[42px]">
                   {project?.nombre || "Proyecto"}
                 </h1>
                 <p className="max-w-2xl text-sm text-secondary">
@@ -262,7 +262,7 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
               ) : null}
             </div>
 
-            <div className="flex w-full flex-col gap-2 lg:w-auto lg:min-w-[320px]">
+            <div className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:min-w-[320px]">
               <input
                 placeholder="Buscar producto o tarea..."
                 className="ui-input w-full"
