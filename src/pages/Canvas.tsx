@@ -6,6 +6,7 @@ import {
   AuthUser,
   CanvasEdge,
   CanvasGranularity,
+  CanvasMultiResponse,
   CanvasNode,
   CanvasResponse,
   CanvasUserOption,
@@ -124,7 +125,8 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
   const graphRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(undefined);
   const [dimensions, setDimensions] = useState<{ w: number; h: number }>({ w: 800, h: 600 });
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [selectedUserKey, setSelectedUserKey] = useState<string | null>(null);
+  // Selected user keys: single-user (length 1) is the default; admins can pick many.
+  const [selectedUserKeys, setSelectedUserKeys] = useState<string[]>([]);
   const [granularity, setGranularity] = useState<CanvasGranularity>("products");
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
@@ -132,7 +134,14 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
   const palette = resolvedTheme === "light" ? LIGHT_PALETTE : DARK_PALETTE;
 
   const isAdmin = !!currentUser?.can_view_all;
-  const targetUserKey = selectedUserKey || currentUser?.user_key || null;
+
+  // Default to the current user when nothing is picked.
+  const effectiveUserKeys = useMemo<string[]>(() => {
+    if (selectedUserKeys.length > 0) return selectedUserKeys;
+    return currentUser?.user_key ? [currentUser.user_key] : [];
+  }, [selectedUserKeys, currentUser?.user_key]);
+
+  const isMulti = effectiveUserKeys.length > 1;
 
   const usersQuery = useQuery<{ users: CanvasUserOption[] }>({
     queryKey: ["canvas", "users"],
@@ -140,14 +149,16 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     enabled: isAdmin,
   });
 
-  const canvasQuery = useQuery<CanvasResponse>({
-    queryKey: ["canvas", targetUserKey, granularity],
-    queryFn: () =>
-      api.canvas(
-        targetUserKey === currentUser?.user_key ? undefined : targetUserKey || undefined,
-        granularity
-      ),
-    enabled: !!targetUserKey,
+  const canvasQuery = useQuery<CanvasResponse | CanvasMultiResponse>({
+    queryKey: ["canvas", effectiveUserKeys.join(","), granularity, isMulti ? "multi" : "single"],
+    queryFn: () => {
+      if (isMulti) {
+        return api.canvasMulti(effectiveUserKeys, granularity);
+      }
+      const [single] = effectiveUserKeys;
+      return api.canvas(single === currentUser?.user_key ? undefined : single, granularity);
+    },
+    enabled: effectiveUserKeys.length > 0,
   });
 
   // Resize handler so the graph follows the canvas container size.
@@ -310,11 +321,37 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
   };
 
   const summary = canvasQuery.data?.summary;
-  const targetUserLabel =
-    canvasQuery.data?.user.display_name ||
-    usersQuery.data?.users.find((u) => u.user_key === targetUserKey)?.display_name ||
-    targetUserKey ||
-    "—";
+  const allUserOptions = usersQuery.data?.users || [];
+  const userLabelByKey = useMemo(() => {
+    const map = new Map<string, string>();
+    if (currentUser) map.set(currentUser.user_key, currentUser.display_name);
+    allUserOptions.forEach((u) => map.set(u.user_key, u.display_name));
+    return map;
+  }, [allUserOptions, currentUser]);
+
+  const targetUserLabel = isMulti
+    ? `${effectiveUserKeys.length} usuarios`
+    : userLabelByKey.get(effectiveUserKeys[0] || "") || effectiveUserKeys[0] || "—";
+
+  const toggleUserSelection = (userKey: string) => {
+    setSelectedUserKeys((prev) => {
+      const next = new Set(prev.length > 0 ? prev : currentUser?.user_key ? [currentUser.user_key] : []);
+      if (next.has(userKey)) {
+        next.delete(userKey);
+      } else {
+        next.add(userKey);
+      }
+      return Array.from(next);
+    });
+  };
+
+  const clearSelection = () => setSelectedUserKeys([]);
+
+  const resetView = () => {
+    const fg = graphRef.current;
+    if (!fg) return;
+    fg.zoomToFit?.(700, 140);
+  };
 
   return (
     <div className="canvas-shell">
@@ -354,26 +391,56 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
 
           {isAdmin ? (
             <div className="canvas-sidebar-section">
-              <div className="canvas-sidebar-heading">Ver canvas de</div>
-              <select
-                className="ui-select w-full"
-                value={targetUserKey || ""}
-                onChange={(e) => setSelectedUserKey(e.target.value || null)}
-              >
-                {currentUser ? (
-                  <option value={currentUser.user_key}>
-                    {currentUser.display_name} (yo)
-                  </option>
+              <div className="canvas-sidebar-heading flex items-center justify-between">
+                <span>Usuarios visibles</span>
+                {effectiveUserKeys.length > 1 ? (
+                  <button
+                    type="button"
+                    className="text-[10px] text-secondary hover:text-primary"
+                    onClick={clearSelection}
+                  >
+                    Solo yo
+                  </button>
                 ) : null}
-                {(usersQuery.data?.users || [])
+              </div>
+              <div className="canvas-user-list">
+                {currentUser ? (
+                  <label
+                    className={`canvas-user-row ${effectiveUserKeys.includes(currentUser.user_key) ? "is-active" : ""}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={effectiveUserKeys.includes(currentUser.user_key)}
+                      onChange={() => toggleUserSelection(currentUser.user_key)}
+                    />
+                    <span className="truncate">{currentUser.display_name} (yo)</span>
+                  </label>
+                ) : null}
+                {allUserOptions
                   .filter((u) => u.user_key !== currentUser?.user_key)
-                  .map((user) => (
-                    <option key={user.user_key} value={user.user_key}>
-                      {user.display_name}
-                      {user.can_view_all ? " · admin" : ""}
-                    </option>
-                  ))}
-              </select>
+                  .map((user) => {
+                    const checked = effectiveUserKeys.includes(user.user_key);
+                    return (
+                      <label
+                        key={user.user_key}
+                        className={`canvas-user-row ${checked ? "is-active" : ""}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleUserSelection(user.user_key)}
+                        />
+                        <span className="truncate">
+                          {user.display_name}
+                          {user.can_view_all ? <span className="text-secondary"> · admin</span> : null}
+                        </span>
+                      </label>
+                    );
+                  })}
+              </div>
+              <p className="text-[10px] text-secondary">
+                Tildá varios para ver cómo se interconectan entre sí.
+              </p>
             </div>
           ) : null}
 
@@ -382,7 +449,7 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
             {summary ? (
               <div className="space-y-1.5 text-[12px]">
                 <div className="flex justify-between text-secondary">
-                  <span>Usuario</span>
+                  <span>{isMulti ? "Usuarios" : "Usuario"}</span>
                   <span className="text-primary truncate ml-2">{targetUserLabel}</span>
                 </div>
                 <div className="flex justify-between text-secondary">
@@ -409,6 +476,16 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
             ) : (
               <div className="text-[12px] text-secondary">—</div>
             )}
+          </div>
+
+          <div className="canvas-sidebar-section">
+            <div className="canvas-sidebar-heading">Navegación</div>
+            <p className="text-[11px] text-secondary leading-5">
+              Arrastrá un área vacía para mover el grafo. Scroll para zoom. Drag sobre un nodo para moverlo.
+            </p>
+            <button type="button" className="canvas-mini-button" onClick={resetView}>
+              Centrar y ajustar zoom
+            </button>
           </div>
 
           <div className="canvas-sidebar-section">

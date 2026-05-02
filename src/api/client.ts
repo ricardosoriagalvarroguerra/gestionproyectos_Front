@@ -232,6 +232,18 @@ export type CanvasResponse = {
   summary: { projects: number; products: number; tasks: number; edges: number };
 };
 
+export type CanvasMultiResponse = {
+  users: {
+    user_key: string;
+    display_name: string;
+    summary: { projects: number; products: number; tasks: number; edges: number };
+  }[];
+  granularity: CanvasGranularity;
+  nodes: CanvasNode[];
+  edges: CanvasEdge[];
+  summary: { projects: number; products: number; tasks: number; edges: number; users: number };
+};
+
 export type CanvasUserOption = {
   user_key: string;
   display_name: string;
@@ -342,6 +354,13 @@ export const api = {
     const params = new URLSearchParams({ granularity });
     if (userKey) params.set("user_key", userKey);
     return apiFetch<CanvasResponse>(`/api/canvas?${params.toString()}`);
+  },
+  canvasMulti: (userKeys: string[], granularity: CanvasGranularity = "products") => {
+    const params = new URLSearchParams({
+      user_keys: userKeys.join(","),
+      granularity,
+    });
+    return apiFetch<CanvasMultiResponse>(`/api/canvas/multi?${params.toString()}`);
   },
   canvasUsers: () => apiFetch<{ users: CanvasUserOption[] }>("/api/canvas/users"),
   timeline: (projectId: string, mode: string, productId?: string) => {

@@ -2319,3 +2319,68 @@ h3,
 .theme-light .canvas-sidebar-section {
   border-top-color: rgba(10, 10, 10, 0.08);
 }
+
+.canvas-user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.canvas-user-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.canvas-user-row:hover {
+  background: rgba(127, 127, 127, 0.08);
+}
+
+.canvas-user-row.is-active {
+  border-color: rgba(193, 18, 31, 0.45);
+  background: rgba(193, 18, 31, 0.08);
+}
+
+.canvas-user-row input[type="checkbox"] {
+  accent-color: #c1121f;
+  flex: 0 0 auto;
+}
+
+.canvas-mini-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border-muted, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: var(--text-secondary, rgba(220, 220, 230, 0.85));
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.canvas-mini-button:hover {
+  background: rgba(127, 127, 127, 0.12);
+  color: var(--text-primary, #f5f5f7);
+}
+
+.theme-light .canvas-mini-button {
+  border-color: rgba(10, 10, 10, 0.12);
+  color: rgba(10, 10, 10, 0.7);
+}
+
+.theme-light .canvas-mini-button:hover {
+  background: rgba(10, 10, 10, 0.06);
+  color: rgba(10, 10, 10, 0.95);
+}
