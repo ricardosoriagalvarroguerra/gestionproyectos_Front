@@ -223,7 +223,7 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     return nodeId(link.source) === hoveredId || nodeId(link.target) === hoveredId;
   };
 
-  // Tune force layout so nodes spread out further apart.
+  // Tune force layout so nodes spread out without flying off the viewport.
   useEffect(() => {
     const fg = graphRef.current;
     if (!fg) return;
@@ -233,18 +233,21 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     };
     const charge = fg.d3Force("charge") as unknown as Adjustable | undefined;
     if (charge && typeof charge.strength === "function") {
-      // Stronger repulsion = more separation between nodes.
-      const strength = granularity === "tasks" ? -650 : granularity === "products" ? -900 : -1100;
-      charge.strength(strength);
+      // Strength scales inversely with node count so dense graphs don't blow up.
+      const n = Math.max(1, graphData.nodes.length);
+      const base = granularity === "tasks" ? -260 : granularity === "products" ? -360 : -450;
+      const scaled = base * Math.min(1.5, Math.max(0.6, 24 / Math.sqrt(n)));
+      charge.strength(scaled);
     }
     const link = fg.d3Force("link") as unknown as Adjustable | undefined;
     if (link && typeof link.distance === "function") {
-      const distance = granularity === "tasks" ? 220 : granularity === "products" ? 320 : 400;
+      const distance = granularity === "tasks" ? 130 : granularity === "products" ? 180 : 240;
       link.distance(distance);
     }
     if (graphData.nodes.length > 0) {
       fg.d3ReheatSimulation?.();
-      requestAnimationFrame(() => fg.zoomToFit?.(700, 140));
+      const t = window.setTimeout(() => fg.zoomToFit?.(700, 140), 200);
+      return () => window.clearTimeout(t);
     }
   }, [graphData.nodes.length, granularity]);
 
@@ -265,7 +268,10 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     ctx: CanvasRenderingContext2D,
     globalScale: number
   ) => {
-    if (typeof node.x !== "number" || typeof node.y !== "number") return;
+    // Skip nodes whose coords haven't been initialized (NaN/Infinity/undefined).
+    if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
+    const x = node.x as number;
+    const y = node.y as number;
     const baseRadius = nodeBaseRadius(node);
     const focused = isFocused(node.id);
     const isHover = hoveredId === node.id;
@@ -274,18 +280,18 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     const alpha = focused ? 1 : 0.18;
 
     if (focused) {
-      const grad = ctx.createRadialGradient(node.x, node.y, radius * 0.6, node.x, node.y, radius * 3.4);
+      const grad = ctx.createRadialGradient(x, y, radius * 0.6, x, y, radius * 3.4);
       grad.addColorStop(0, colors.glow);
       grad.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.arc(node.x, node.y, radius * 3.4, 0, 2 * Math.PI, false);
+      ctx.arc(x, y, radius * 3.4, 0, 2 * Math.PI, false);
       ctx.fill();
     }
 
     ctx.globalAlpha = alpha;
     ctx.beginPath();
-    ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI, false);
+    ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
     ctx.fillStyle = colors.fill;
     ctx.fill();
     if (isHover) {
@@ -303,7 +309,7 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     ctx.textBaseline = "top";
     ctx.fillStyle = focused ? palette.labelActive : palette.labelDim;
     const truncated = label.length > 36 ? `${label.slice(0, 33)}…` : label;
-    ctx.fillText(truncated, node.x, node.y + radius + 4 / globalScale);
+    ctx.fillText(truncated, x, y + radius + 4 / globalScale);
   };
 
   const linkColor = (link: GraphLink): string => {
@@ -544,14 +550,22 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
               height={dimensions.h}
               backgroundColor={palette.background}
               cooldownTicks={150}
+              cooldownTime={6000}
+              d3AlphaDecay={0.035}
+              d3VelocityDecay={0.5}
+              warmupTicks={20}
               nodeRelSize={6}
+              minZoom={0.2}
+              maxZoom={6}
               nodeCanvasObject={drawNode}
               nodeCanvasObjectMode={() => "replace"}
               nodePointerAreaPaint={(node, color, ctx) => {
-                if (typeof node.x !== "number" || typeof node.y !== "number") return;
+                const x = node.x;
+                const y = node.y;
+                if (!Number.isFinite(x) || !Number.isFinite(y)) return;
                 ctx.fillStyle = color;
                 ctx.beginPath();
-                ctx.arc(node.x, node.y, nodeBaseRadius(node) + 4, 0, 2 * Math.PI, false);
+                ctx.arc(x as number, y as number, nodeBaseRadius(node) + 4, 0, 2 * Math.PI, false);
                 ctx.fill();
               }}
               linkColor={linkColor}
