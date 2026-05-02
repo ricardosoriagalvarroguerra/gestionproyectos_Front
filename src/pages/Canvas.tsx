@@ -145,10 +145,11 @@ function useResolvedTheme(): ResolvedTheme {
 }
 
 function nodeBaseRadius(node: GraphNode): number {
-  if (node.type === "user") return 14;
-  if (node.type === "project") return 9;
-  if (node.type === "product") return 7;
-  return 5; // task
+  // Visual hierarchy: user (largest) > project > product > task (smallest).
+  if (node.type === "user") return 24;
+  if (node.type === "project") return 13;
+  if (node.type === "product") return 8;
+  return 4.5; // task
 }
 
 const GRANULARITY_OPTIONS: { value: CanvasGranularity; label: string; help: string }[] = [
@@ -528,11 +529,17 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
       ctx.fillText(String(sharedCount), bx, by + 0.5 / globalScale);
     }
 
-    // Label
+    // Label — size mirrors the node hierarchy.
     const label = node.label || "—";
     const fontSize =
-      node.type === "user" ? 13 / globalScale : node.type === "task" ? 9 / globalScale : 10 / globalScale;
-    ctx.font = `${node.type === "user" ? "600" : "500"} ${fontSize}px Inter, system-ui, sans-serif`;
+      node.type === "user"
+        ? 15 / globalScale
+        : node.type === "project"
+          ? 11 / globalScale
+          : node.type === "product"
+            ? 9.5 / globalScale
+            : 8 / globalScale; // task
+    ctx.font = `${node.type === "user" ? "700" : node.type === "project" ? "600" : "500"} ${fontSize}px Inter, system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     ctx.fillStyle = focused ? palette.labelActive : palette.labelDim;
