@@ -42,7 +42,11 @@ type ResolvedTheme = "dark" | "light";
 type Palette = {
   background: string;
   user: { fill: string; glow: string };
-  other: { fill: string; glow: string };
+  // Cool-spectrum ramp: project (indigo) → product (blue) → task (cyan).
+  // Same color family, differentiated by hue + tone for a coherent feel.
+  project: { fill: string; glow: string };
+  product: { fill: string; glow: string };
+  task: { fill: string; glow: string };
   link: string;
   particle: string;
   labelActive: string;
@@ -89,7 +93,10 @@ const USER_PALETTE_LIGHT: { fill: string; glow: string }[] = [
 const DARK_PALETTE: Palette = {
   background: "#000000",
   user: { fill: USER_RED, glow: USER_RED_GLOW },
-  other: { fill: "#ffffff", glow: "rgba(255, 255, 255, 0.32)" },
+  // Cool ramp on the indigo → blue → cyan family (vivid against black).
+  project: { fill: "#818cf8", glow: "rgba(129, 140, 248, 0.30)" }, // indigo-400
+  product: { fill: "#60a5fa", glow: "rgba(96, 165, 250, 0.28)" }, // blue-400
+  task: { fill: "#22d3ee", glow: "rgba(34, 211, 238, 0.26)" }, // cyan-400
   link: "rgba(255, 255, 255, 0.22)",
   linkDim: "rgba(255, 255, 255, 0.04)",
   particle: "rgba(255, 255, 255, 0.7)",
@@ -103,10 +110,11 @@ const DARK_PALETTE: Palette = {
 
 const LIGHT_PALETTE: Palette = {
   background: "#ffffff",
-  // Softer rose instead of pure red, less aggressive on white.
   user: { fill: "#a4133c", glow: "rgba(164, 19, 60, 0.22)" },
-  // Zinc-600 instead of pure black so nodes feel less heavy.
-  other: { fill: "#52525b", glow: "rgba(82, 82, 91, 0.20)" },
+  // Same cool ramp, deeper tones so they stay legible (and soft) on white.
+  project: { fill: "#4338ca", glow: "rgba(67, 56, 202, 0.18)" }, // indigo-700
+  product: { fill: "#1d4ed8", glow: "rgba(29, 78, 216, 0.16)" }, // blue-700
+  task: { fill: "#0e7490", glow: "rgba(14, 116, 144, 0.16)" }, // cyan-700
   link: "rgba(82, 82, 91, 0.30)",
   linkDim: "rgba(82, 82, 91, 0.06)",
   particle: "rgba(82, 82, 91, 0.55)",
@@ -464,7 +472,8 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     const isSelected = selectedNodeId === node.id;
     const radius = baseRadius * (isHover || isSelected ? 1.25 : 1);
 
-    // Pick color — multi-user mode colors user nodes by palette.
+    // Pick color — user nodes follow the user palette; project/product/task
+    // each have their own colour from the cool-spectrum ramp.
     let colors: { fill: string; glow: string };
     if (node.type === "user") {
       if (isMulti && node.user_key) {
@@ -472,8 +481,12 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
       } else {
         colors = palette.user;
       }
+    } else if (node.type === "project") {
+      colors = palette.project;
+    } else if (node.type === "product") {
+      colors = palette.product;
     } else {
-      colors = palette.other;
+      colors = palette.task;
     }
 
     const sharedCount = sharedCountById.get(node.id) ?? 0;
@@ -867,12 +880,20 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
             <div className="canvas-sidebar-heading">Leyenda</div>
             <div className="space-y-1.5 text-[12px] text-secondary">
               <span className="canvas-legend-item">
-                <span className="canvas-legend-dot" style={{ background: palette.user.fill }} />
+                <span className="canvas-legend-dot" style={{ background: palette.user.fill, width: 12, height: 12 }} />
                 Usuario
               </span>
               <span className="canvas-legend-item">
-                <span className="canvas-legend-dot" style={{ background: palette.other.fill }} />
-                Proyecto / Producto / Tarea
+                <span className="canvas-legend-dot" style={{ background: palette.project.fill, width: 11, height: 11 }} />
+                Proyecto
+              </span>
+              <span className="canvas-legend-item">
+                <span className="canvas-legend-dot" style={{ background: palette.product.fill, width: 9, height: 9 }} />
+                Producto
+              </span>
+              <span className="canvas-legend-item">
+                <span className="canvas-legend-dot" style={{ background: palette.task.fill, width: 7, height: 7 }} />
+                Tarea
               </span>
               {isMulti ? (
                 <span className="canvas-legend-item">
@@ -881,7 +902,6 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
                     style={{
                       background: "transparent",
                       border: `2px solid ${palette.haloStroke}`,
-                      boxShadow: `0 0 0 2px ${palette.badgeBg} inset`,
                     }}
                   />
                   Compartido (2+)
