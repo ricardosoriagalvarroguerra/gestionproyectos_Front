@@ -297,12 +297,6 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     <div className="min-h-full flex flex-col gap-4">
       <section className="glass overflow-hidden px-5 py-5 sm:px-6 sm:py-6">
         <p className="text-[10px] uppercase tracking-[0.28em] text-secondary">Network view</p>
-        <h1 className="text-[28px] sm:text-[34px] leading-tight font-semibold mt-1">Canvas</h1>
-        <p className="mt-2 max-w-2xl text-sm text-secondary">
-          Vista de grafo estilo Obsidian: tu nodo central conectado a tus proyectos y de cada
-          proyecto a sus productos. Pasá el mouse sobre un nodo para resaltar conexiones, hacé
-          click para abrir en Notion, y arrastrá para reordenar.
-        </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {isAdmin ? (
