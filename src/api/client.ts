@@ -196,10 +196,12 @@ export type WorkloadUserRow = {
   weeks: WorkloadCell[];
 };
 
+export type CanvasGranularity = "projects" | "products" | "tasks";
+
 export type CanvasNode = {
   id: string;
   label: string;
-  type: "user" | "project" | "product";
+  type: "user" | "project" | "product" | "task";
   user_key?: string;
   is_admin?: boolean;
   notion_url?: string | null;
@@ -214,14 +216,20 @@ export type CanvasNode = {
 export type CanvasEdge = {
   source: string;
   target: string;
-  kind: "user_project" | "user_product" | "project_product";
+  kind:
+    | "user_project"
+    | "user_product"
+    | "user_task"
+    | "project_product"
+    | "product_task";
 };
 
 export type CanvasResponse = {
   user: { user_key: string; display_name: string };
+  granularity: CanvasGranularity;
   nodes: CanvasNode[];
   edges: CanvasEdge[];
-  summary: { projects: number; products: number; edges: number };
+  summary: { projects: number; products: number; tasks: number; edges: number };
 };
 
 export type CanvasUserOption = {
@@ -330,10 +338,11 @@ export const api = {
   projectDashboard: (projectId: string) => apiFetch<DashboardResponse>(`/api/projects/${projectId}/dashboard`),
   workload: (year: number, month: number) =>
     apiFetch<WorkloadOverviewResponse>(`/api/workload?year=${year}&month=${month}`),
-  canvas: (userKey?: string) =>
-    apiFetch<CanvasResponse>(
-      userKey ? `/api/canvas?user_key=${encodeURIComponent(userKey)}` : "/api/canvas"
-    ),
+  canvas: (userKey?: string, granularity: CanvasGranularity = "products") => {
+    const params = new URLSearchParams({ granularity });
+    if (userKey) params.set("user_key", userKey);
+    return apiFetch<CanvasResponse>(`/api/canvas?${params.toString()}`);
+  },
   canvasUsers: () => apiFetch<{ users: CanvasUserOption[] }>("/api/canvas/users"),
   timeline: (projectId: string, mode: string, productId?: string) => {
     const params = new URLSearchParams({ mode });
