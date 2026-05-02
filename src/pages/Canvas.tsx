@@ -32,18 +32,73 @@ type GraphData = {
   links: GraphLink[];
 };
 
-const NODE_COLORS = {
-  user: { fill: "#7c5cff", glow: "rgba(124, 92, 255, 0.45)" },
-  userAdmin: { fill: "#ff7eb6", glow: "rgba(255, 126, 182, 0.5)" },
-  project: { fill: "#2383e2", glow: "rgba(35, 131, 226, 0.4)" },
-  product: { fill: "#3ec78b", glow: "rgba(62, 199, 139, 0.4)" },
-} as const;
+type ResolvedTheme = "dark" | "light";
 
-const LINK_COLORS = {
-  user_project: "rgba(124, 92, 255, 0.55)",
-  user_product: "rgba(124, 92, 255, 0.35)",
-  project_product: "rgba(35, 131, 226, 0.45)",
-} as const;
+type Palette = {
+  background: string;
+  user: { fill: string; glow: string };
+  project: { fill: string; glow: string };
+  product: { fill: string; glow: string };
+  link: string;
+  particle: string;
+  labelActive: string;
+  labelDim: string;
+  hoverStroke: string;
+};
+
+const DARK_PALETTE: Palette = {
+  background: "#000000",
+  // User node: pure white in dark theme
+  user: { fill: "#ffffff", glow: "rgba(255, 255, 255, 0.55)" },
+  project: { fill: "#a1a1aa", glow: "rgba(161, 161, 170, 0.18)" },
+  product: { fill: "#71717a", glow: "rgba(113, 113, 122, 0.14)" },
+  link: "rgba(255, 255, 255, 0.18)",
+  particle: "rgba(255, 255, 255, 0.6)",
+  labelActive: "rgba(240, 240, 245, 0.92)",
+  labelDim: "rgba(160, 160, 170, 0.32)",
+  hoverStroke: "rgba(255, 255, 255, 0.85)",
+};
+
+const LIGHT_PALETTE: Palette = {
+  background: "#ffffff",
+  // User node: near-black in light theme
+  user: { fill: "#0a0a0a", glow: "rgba(10, 10, 10, 0.32)" },
+  project: { fill: "#52525b", glow: "rgba(82, 82, 91, 0.16)" },
+  product: { fill: "#a1a1aa", glow: "rgba(161, 161, 170, 0.14)" },
+  link: "rgba(10, 10, 10, 0.22)",
+  particle: "rgba(10, 10, 10, 0.55)",
+  labelActive: "rgba(10, 10, 10, 0.85)",
+  labelDim: "rgba(82, 82, 91, 0.35)",
+  hoverStroke: "rgba(10, 10, 10, 0.85)",
+};
+
+function resolveThemeFromDom(): ResolvedTheme {
+  if (typeof document === "undefined") return "dark";
+  return document.documentElement.classList.contains("theme-light") ? "light" : "dark";
+}
+
+function useResolvedTheme(): ResolvedTheme {
+  const [theme, setTheme] = useState<ResolvedTheme>(() => resolveThemeFromDom());
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const update = () => setTheme(resolveThemeFromDom());
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    media.addEventListener("change", update);
+    update();
+    return () => {
+      observer.disconnect();
+      media.removeEventListener("change", update);
+    };
+  }, []);
+
+  return theme;
+}
 
 function nodeBaseRadius(node: GraphNode): number {
   if (node.type === "user") return 14;
@@ -51,12 +106,10 @@ function nodeBaseRadius(node: GraphNode): number {
   return 6;
 }
 
-function nodeColor(node: GraphNode): { fill: string; glow: string } {
-  if (node.type === "user") {
-    return node.is_admin ? NODE_COLORS.userAdmin : NODE_COLORS.user;
-  }
-  if (node.type === "project") return NODE_COLORS.project;
-  return NODE_COLORS.product;
+function nodeColor(node: GraphNode, palette: Palette): { fill: string; glow: string } {
+  if (node.type === "user") return palette.user;
+  if (node.type === "project") return palette.project;
+  return palette.product;
 }
 
 export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
@@ -65,6 +118,9 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
   const [dimensions, setDimensions] = useState<{ w: number; h: number }>({ w: 800, h: 600 });
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [selectedUserKey, setSelectedUserKey] = useState<string | null>(null);
+
+  const resolvedTheme = useResolvedTheme();
+  const palette = resolvedTheme === "light" ? LIGHT_PALETTE : DARK_PALETTE;
 
   const isAdmin = !!currentUser?.can_view_all;
   const targetUserKey = selectedUserKey || currentUser?.user_key || null;
@@ -122,10 +178,10 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     return map;
   }, [graphData]);
 
-  const isFocused = (nodeId: string) => {
+  const isFocused = (id: string) => {
     if (!hoveredId) return true;
-    if (hoveredId === nodeId) return true;
-    return adjacency.get(hoveredId)?.has(nodeId) ?? false;
+    if (hoveredId === id) return true;
+    return adjacency.get(hoveredId)?.has(id) ?? false;
   };
 
   const isLinkActive = (link: GraphLink) => {
@@ -133,7 +189,7 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     return nodeId(link.source) === hoveredId || nodeId(link.target) === hoveredId;
   };
 
-  // Re-fit and tune forces when data loads or container size changes.
+  // Tune force layout so particles/nodes are more spread out.
   useEffect(() => {
     const fg = graphRef.current;
     if (!fg) return;
@@ -143,14 +199,15 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     };
     const charge = fg.d3Force("charge") as unknown as Adjustable | undefined;
     if (charge && typeof charge.strength === "function") {
-      charge.strength(-160);
+      charge.strength(-360);
     }
     const link = fg.d3Force("link") as unknown as Adjustable | undefined;
     if (link && typeof link.distance === "function") {
-      link.distance(70);
+      link.distance(160);
     }
     if (graphData.nodes.length > 0) {
-      requestAnimationFrame(() => fg.zoomToFit?.(600, 80));
+      fg.d3ReheatSimulation?.();
+      requestAnimationFrame(() => fg.zoomToFit?.(700, 110));
     }
   }, [graphData.nodes.length]);
 
@@ -159,7 +216,6 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
       window.open(node.notion_url, "_blank", "noopener,noreferrer");
       return;
     }
-    // Center camera on the node when there's nothing to open.
     const fg = graphRef.current;
     if (fg && typeof node.x === "number" && typeof node.y === "number") {
       fg.centerAt(node.x, node.y, 600);
@@ -177,10 +233,9 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     const focused = isFocused(node.id);
     const isHover = hoveredId === node.id;
     const radius = baseRadius * (isHover ? 1.25 : 1);
-    const colors = nodeColor(node);
+    const colors = nodeColor(node, palette);
     const alpha = focused ? 1 : 0.18;
 
-    // Glow when focused or hovered.
     if (focused) {
       const grad = ctx.createRadialGradient(node.x, node.y, radius * 0.6, node.x, node.y, radius * 3.4);
       grad.addColorStop(0, colors.glow);
@@ -198,29 +253,31 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     ctx.fill();
     if (isHover) {
       ctx.lineWidth = 2 / globalScale;
-      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.strokeStyle = palette.hoverStroke;
       ctx.stroke();
     }
     ctx.globalAlpha = 1;
 
-    // Label
     const label = node.label || "—";
     const fontSize = node.type === "user" ? 13 / globalScale : 10 / globalScale;
     ctx.font = `${node.type === "user" ? "600" : "500"} ${fontSize}px Inter, system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
-    ctx.fillStyle = focused ? "rgba(240, 240, 248, 0.95)" : "rgba(180, 180, 200, 0.35)";
+    ctx.fillStyle = focused ? palette.labelActive : palette.labelDim;
     const truncated = label.length > 36 ? `${label.slice(0, 33)}…` : label;
     ctx.fillText(truncated, node.x, node.y + radius + 4 / globalScale);
   };
 
   const linkColor = (link: GraphLink): string => {
-    const base = LINK_COLORS[link.kind] || "rgba(255,255,255,0.25)";
-    if (!hoveredId) return base;
-    return isLinkActive(link) ? base : "rgba(255,255,255,0.05)";
+    if (!hoveredId) return palette.link;
+    return isLinkActive(link)
+      ? palette.link
+      : resolvedTheme === "light"
+        ? "rgba(10, 10, 10, 0.05)"
+        : "rgba(255, 255, 255, 0.04)";
   };
 
-  const linkWidth = (link: GraphLink): number => (isLinkActive(link) ? 1.6 : 0.6);
+  const linkWidth = (link: GraphLink): number => (isLinkActive(link) ? 1.4 : 0.5);
 
   const handleNodeHover = (node: GraphNode | null) => {
     setHoveredId(node ? node.id : null);
@@ -243,7 +300,7 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
         <h1 className="text-[28px] sm:text-[34px] leading-tight font-semibold mt-1">Canvas</h1>
         <p className="mt-2 max-w-2xl text-sm text-secondary">
           Vista de grafo estilo Obsidian: tu nodo central conectado a tus proyectos y de cada
-          proyecto a sus productos. Pasa el mouse sobre un nodo para resaltar conexiones, hace
+          proyecto a sus productos. Pasá el mouse sobre un nodo para resaltar conexiones, hacé
           click para abrir en Notion, y arrastrá para reordenar.
         </p>
 
@@ -275,9 +332,9 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
           {summary ? (
             <div className="flex flex-wrap items-center gap-2 text-[11px]">
               <span className="ui-badge ui-badge--neutral">Usuario: {targetUserLabel}</span>
-              <span className="ui-badge ui-badge--info">{summary.projects} proyectos</span>
-              <span className="ui-badge ui-badge--success">{summary.products} productos</span>
-              <span className="ui-badge ui-badge--accent">{summary.edges} conexiones</span>
+              <span className="ui-badge ui-badge--neutral">{summary.projects} proyectos</span>
+              <span className="ui-badge ui-badge--neutral">{summary.products} productos</span>
+              <span className="ui-badge ui-badge--neutral">{summary.edges} conexiones</span>
             </div>
           ) : null}
         </div>
@@ -286,22 +343,23 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
       <section className="glass relative flex-1 min-h-[520px] overflow-hidden">
         <div className="canvas-legend">
           <span className="canvas-legend-item">
-            <span className="canvas-legend-dot" style={{ background: NODE_COLORS.user.fill }} />
+            <span className="canvas-legend-dot" style={{ background: palette.user.fill }} />
             Usuario
           </span>
           <span className="canvas-legend-item">
-            <span className="canvas-legend-dot" style={{ background: NODE_COLORS.project.fill }} />
+            <span className="canvas-legend-dot" style={{ background: palette.project.fill }} />
             Proyecto
           </span>
           <span className="canvas-legend-item">
-            <span className="canvas-legend-dot" style={{ background: NODE_COLORS.product.fill }} />
+            <span className="canvas-legend-dot" style={{ background: palette.product.fill }} />
             Producto
           </span>
         </div>
 
         <div
           ref={containerRef}
-          className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(40,42,54,0.65)_0%,rgba(15,16,22,0.95)_70%)]"
+          className="absolute inset-0"
+          style={{ background: palette.background }}
         >
           {canvasQuery.isLoading ? (
             <div className="absolute inset-0 grid place-items-center text-sm text-secondary">
@@ -321,8 +379,8 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
               graphData={graphData}
               width={dimensions.w}
               height={dimensions.h}
-              backgroundColor="rgba(0,0,0,0)"
-              cooldownTicks={120}
+              backgroundColor={palette.background}
+              cooldownTicks={150}
               nodeRelSize={6}
               nodeCanvasObject={drawNode}
               nodeCanvasObjectMode={() => "replace"}
@@ -335,12 +393,10 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
               }}
               linkColor={linkColor}
               linkWidth={linkWidth}
-              linkDirectionalParticles={(link) => (isLinkActive(link) ? 3 : 1)}
-              linkDirectionalParticleSpeed={() => 0.006}
-              linkDirectionalParticleWidth={(link) => (isLinkActive(link) ? 2.4 : 1.2)}
-              linkDirectionalParticleColor={(link) =>
-                LINK_COLORS[link.kind] || "rgba(255,255,255,0.5)"
-              }
+              linkDirectionalParticles={(link) => (isLinkActive(link) ? 2 : 1)}
+              linkDirectionalParticleSpeed={() => 0.0035}
+              linkDirectionalParticleWidth={(link) => (isLinkActive(link) ? 2 : 1.1)}
+              linkDirectionalParticleColor={() => palette.particle}
               onNodeHover={handleNodeHover}
               onNodeClick={handleNodeClick}
               onBackgroundClick={() => setHoveredId(null)}
