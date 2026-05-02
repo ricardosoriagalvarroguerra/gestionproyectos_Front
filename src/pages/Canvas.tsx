@@ -212,7 +212,7 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     return nodeId(link.source) === hoveredId || nodeId(link.target) === hoveredId;
   };
 
-  // Tune force layout so particles/nodes are more spread out.
+  // Tune force layout so nodes spread out further apart.
   useEffect(() => {
     const fg = graphRef.current;
     if (!fg) return;
@@ -222,18 +222,18 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     };
     const charge = fg.d3Force("charge") as unknown as Adjustable | undefined;
     if (charge && typeof charge.strength === "function") {
-      // More repulsion when there are more nodes (tasks granularity).
-      const strength = granularity === "tasks" ? -260 : granularity === "products" ? -360 : -420;
+      // Stronger repulsion = more separation between nodes.
+      const strength = granularity === "tasks" ? -650 : granularity === "products" ? -900 : -1100;
       charge.strength(strength);
     }
     const link = fg.d3Force("link") as unknown as Adjustable | undefined;
     if (link && typeof link.distance === "function") {
-      const distance = granularity === "tasks" ? 110 : granularity === "products" ? 160 : 200;
+      const distance = granularity === "tasks" ? 220 : granularity === "products" ? 320 : 400;
       link.distance(distance);
     }
     if (graphData.nodes.length > 0) {
       fg.d3ReheatSimulation?.();
-      requestAnimationFrame(() => fg.zoomToFit?.(700, 110));
+      requestAnimationFrame(() => fg.zoomToFit?.(700, 140));
     }
   }, [graphData.nodes.length, granularity]);
 
