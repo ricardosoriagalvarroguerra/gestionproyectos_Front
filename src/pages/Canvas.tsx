@@ -153,12 +153,12 @@ function useResolvedTheme(): ResolvedTheme {
 }
 
 function nodeBaseRadius(node: GraphNode): number {
-  // Strong visual hierarchy: user >> project >> product >> task.
-  // Ratios approximately user/project=2, project/product=2, product/task=3.
-  if (node.type === "user") return 36;
-  if (node.type === "project") return 18;
-  if (node.type === "product") return 9;
-  return 3; // task
+  // Strong visual hierarchy with overall larger sizes.
+  // Ratios kept the same: 12 : 6 : 3 : 1 (user : project : product : task).
+  if (node.type === "user") return 60;
+  if (node.type === "project") return 30;
+  if (node.type === "product") return 15;
+  return 5; // task
 }
 
 const GRANULARITY_OPTIONS: { value: CanvasGranularity; label: string; help: string }[] = [
@@ -419,20 +419,17 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
       releaseHierarchyLayout();
       if (charge && typeof charge.strength === "function") {
         const n = Math.max(1, graphData.nodes.length);
-        // Aggressive baseline repulsion — nodes get a lot of personal space.
-        const base = granularity === "tasks" ? -1400 : granularity === "products" ? -2200 : -3000;
-        // Scale up sparse graphs even more; dense ones stay close to baseline.
+        // Bigger nodes need proportionally more breathing room.
+        const base = granularity === "tasks" ? -1900 : granularity === "products" ? -3000 : -4000;
         const scaled = base * Math.min(2.5, Math.max(0.9, 40 / Math.sqrt(n)));
         charge.strength(scaled);
       }
-      // Optional theta tweak for finer-grained repulsion calculation in dense graphs.
       const chargeAny = charge as unknown as { theta?: (t: number) => unknown; distanceMax?: (d: number) => unknown };
       if (chargeAny && typeof chargeAny.distanceMax === "function") {
-        // Let charge act over a bigger radius so far nodes still feel some push.
-        chargeAny.distanceMax(2400);
+        chargeAny.distanceMax(3200);
       }
       if (link && typeof link.distance === "function") {
-        const distance = granularity === "tasks" ? 380 : granularity === "products" ? 560 : 720;
+        const distance = granularity === "tasks" ? 480 : granularity === "products" ? 720 : 920;
         link.distance(distance);
       }
       const linkAny = link as unknown as { strength?: (s: number) => unknown };
@@ -547,12 +544,12 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     const label = node.label || "—";
     const fontSize =
       node.type === "user"
-        ? 18 / globalScale
+        ? 22 / globalScale
         : node.type === "project"
-          ? 12 / globalScale
+          ? 14 / globalScale
           : node.type === "product"
-            ? 9 / globalScale
-            : 7 / globalScale; // task
+            ? 10.5 / globalScale
+            : 8 / globalScale; // task
     ctx.font = `${node.type === "user" ? "700" : node.type === "project" ? "600" : "500"} ${fontSize}px Inter, system-ui, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
@@ -880,7 +877,7 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
             <div className="canvas-sidebar-heading">Leyenda</div>
             <div className="space-y-1.5 text-[12px] text-secondary">
               <span className="canvas-legend-item">
-                <span className="canvas-legend-dot" style={{ background: palette.user.fill, width: 12, height: 12 }} />
+                <span className="canvas-legend-dot" style={{ background: palette.user.fill, width: 14, height: 14 }} />
                 Usuario
               </span>
               <span className="canvas-legend-item">
@@ -888,11 +885,11 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
                 Proyecto
               </span>
               <span className="canvas-legend-item">
-                <span className="canvas-legend-dot" style={{ background: palette.product.fill, width: 9, height: 9 }} />
+                <span className="canvas-legend-dot" style={{ background: palette.product.fill, width: 8, height: 8 }} />
                 Producto
               </span>
               <span className="canvas-legend-item">
-                <span className="canvas-legend-dot" style={{ background: palette.task.fill, width: 7, height: 7 }} />
+                <span className="canvas-legend-dot" style={{ background: palette.task.fill, width: 5, height: 5 }} />
                 Tarea
               </span>
               {isMulti ? (
