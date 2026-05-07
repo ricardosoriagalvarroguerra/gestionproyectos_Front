@@ -64,7 +64,24 @@ export function Timeline({ data, mode, onModeChange, loading, className, maxHeig
   const [granularity, setGranularity] = useState<"month" | "quarter" | "year">("month");
   const [focus, setFocus] = useState<FocusPayload | null>(null);
   const [pinned, setPinned] = useState<FocusPayload | null>(null);
-  const effectiveMaxHeight = maxHeight ?? "520px";
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const effectiveMaxHeight = isFullscreen ? "calc(100vh - 220px)" : (maxHeight ?? "520px");
+
+  // ESC to exit fullscreen.
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    // Lock body scroll while fullscreen.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isFullscreen]);
   const monthViews = useMemo(
     () => buildViews(items, granularity, mode === "tasks" ? data?.groups : undefined),
     [items, data?.groups, mode, granularity]
@@ -105,7 +122,7 @@ export function Timeline({ data, mode, onModeChange, loading, className, maxHeig
   };
 
   return (
-    <div className={`glass timeline-shell flex flex-col min-w-0 pdf-avoid-break ${className || ""}`}>
+    <div className={`glass timeline-shell flex flex-col min-w-0 pdf-avoid-break ${isFullscreen ? "is-fullscreen" : ""} ${className || ""}`}>
       <div className="relative overflow-hidden border-b border-border-muted">
         <div className="relative flex flex-col gap-4 px-4 py-4 sm:px-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -144,6 +161,29 @@ export function Timeline({ data, mode, onModeChange, loading, className, maxHeig
                   <option value="year">Año</option>
                 </select>
               </label>
+              <button
+                type="button"
+                className="timeline-nav-btn timeline-fullscreen-btn"
+                onClick={() => setIsFullscreen((v) => !v)}
+                aria-label={isFullscreen ? "Salir de pantalla completa" : "Expandir a pantalla completa"}
+                title={isFullscreen ? "Salir (Esc)" : "Expandir"}
+              >
+                {isFullscreen ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M9 3v6H3" />
+                    <path d="M3 21l6-6" />
+                    <path d="M15 21v-6h6" />
+                    <path d="M21 3l-6 6" />
+                  </svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 9V3h6" />
+                    <path d="M21 9V3h-6" />
+                    <path d="M21 15v6h-6" />
+                    <path d="M3 15v6h6" />
+                  </svg>
+                )}
+              </button>
             </div>
           </div>
 

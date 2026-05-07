@@ -1653,6 +1653,34 @@ h3,
   border: 1px solid var(--border-muted);
 }
 
+.timeline-shell.is-fullscreen {
+  position: fixed;
+  inset: 12px;
+  z-index: 80;
+  border-radius: 16px;
+  background: var(--surface-strong, var(--surface, #0b0c10));
+  box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.55), 0 8px 28px -12px rgba(0, 0, 0, 0.35);
+  animation: timeline-fullscreen-in 220ms ease;
+}
+
+@keyframes timeline-fullscreen-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.timeline-fullscreen-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  padding: 0;
+}
+
 .timeline-chip {
   display: inline-flex;
   align-items: center;
