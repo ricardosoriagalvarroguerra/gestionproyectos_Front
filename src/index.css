@@ -2638,3 +2638,107 @@ h3,
   text-align: center;
   text-decoration: none;
 }
+
+/* --------------------- New task modal --------------------- */
+.new-task-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  animation: nt-fade 200ms ease;
+}
+
+@keyframes nt-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.new-task-modal {
+  width: min(520px, 100%);
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+  background: var(--bg-panel, #15171c);
+  border: 1px solid var(--border-muted, rgba(255, 255, 255, 0.10));
+  border-radius: 14px;
+  padding: 18px;
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.55);
+  color: var(--text-primary, #f0f0f5);
+  animation: nt-pop 220ms ease;
+}
+
+@keyframes nt-pop {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.theme-light .new-task-modal {
+  background: #ffffff;
+  border-color: rgba(10, 10, 10, 0.10);
+  color: rgba(10, 10, 10, 0.92);
+}
+
+.new-task-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.new-task-close {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border-muted, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: inherit;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.new-task-close:hover {
+  background: rgba(127, 127, 127, 0.16);
+}
+
+.new-task-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.new-task-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary, rgba(180, 180, 200, 0.7));
+}
+
+.new-task-field span {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.new-task-error {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(220, 38, 38, 0.12);
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  color: #fca5a5;
+  font-size: 12px;
+}
+
+.theme-light .new-task-error {
+  background: rgba(220, 38, 38, 0.08);
+  color: #b91c1c;
+}
+
+.new-task-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}

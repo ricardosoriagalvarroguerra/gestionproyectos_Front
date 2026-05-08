@@ -347,6 +347,28 @@ export const api = {
   projectProducts: (projectId: string) => apiFetch<Product[]>(`/api/projects/${projectId}/products`),
   projectTasks: (projectId: string) => apiFetch<Task[]>(`/api/projects/${projectId}/tasks`),
   productTasks: (productId: string) => apiFetch<Task[]>(`/api/products/${productId}/tasks`),
+  createProductTask: (
+    productId: string,
+    payload: {
+      tarea: string;
+      estado?: string | null;
+      importancia?: string | null;
+      fecha_start?: string | null;
+      fecha_end?: string | null;
+    }
+  ) =>
+    apiFetch<{
+      task_id: string;
+      tarea: string | null;
+      estado: string | null;
+      importancia: string | null;
+      fecha_start: string | null;
+      fecha_end: string | null;
+      notion_url: string | null;
+    }>(`/api/products/${productId}/tasks`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   projectDashboard: (projectId: string) => apiFetch<DashboardResponse>(`/api/projects/${projectId}/dashboard`),
   workload: (year: number, month: number) =>
     apiFetch<WorkloadOverviewResponse>(`/api/workload?year=${year}&month=${month}`),

@@ -403,6 +403,11 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
                     filters={taskFilters}
                     onChangeFilters={setTaskFilters}
                     highlightTaskId={taskIdParam}
+                    productId={selectedProductId}
+                    productName={
+                      productsQuery.data?.find((p) => p.product_id === selectedProductId)?.nombre || null
+                    }
+                    projectId={projectId}
                   />
                 ) : (
                   <div className="glass p-3 text-xs text-secondary">
