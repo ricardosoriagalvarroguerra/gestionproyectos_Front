@@ -12,7 +12,7 @@ type Props = {
 };
 
 type NormalizedItem = TimelineItem & { startDate?: Date; endDate?: Date };
-type WeekSlot = { start: Date; end: Date; label: string; isCurrent?: boolean };
+type WeekSlot = { start: Date; end: Date; label: string; subLabel?: string; isCurrent?: boolean };
 type MonthSegment = { label: string; span: number; startIndex: number; date: Date };
 type MonthView = {
   label: string;
@@ -549,9 +549,10 @@ function MonthGrid({
       onScroll={handleScroll}
     >
       {views.map((view) => {
-        const headerRowHeight = 24;
+        const monthRowHeight = 24;
+        const weekRowHeight = 38;
         const rowHeight = 72;
-        const rowTemplate = `${headerRowHeight}px ${headerRowHeight}px repeat(${view.rows.length}, ${rowHeight}px)`;
+        const rowTemplate = `${monthRowHeight}px ${weekRowHeight}px repeat(${view.rows.length}, ${rowHeight}px)`;
         const boardTemplate = `${leftWidth}px 10px repeat(${view.weeks.length}, minmax(${view.cellMinWidth}px, 1fr))`;
         const weekStartColumn = 3;
         const rowStartIndex = 3;
@@ -613,13 +614,15 @@ function MonthGrid({
                         isMonthStart ? "is-start" : ""
                       }`}
                       style={{ gridColumn: `${idx + weekStartColumn}`, gridRow: "2" }}
+                      title={weekRangeLabel(w.start, w.end)}
                       onMouseEnter={() => {
                         setHoveredWeek({ viewLabel: view.label, weekIndex: idx });
                         onFocusChange(null);
                         setTooltip((current) => (current?.mode === "pinned" ? current : null));
                       }}
                     >
-                      {w.label}
+                      {w.subLabel ? <span className="timeline-week-sub">{w.subLabel}</span> : null}
+                      <span className="timeline-week-main">{w.label}</span>
                     </div>
                   );
                 })}
@@ -933,7 +936,13 @@ function buildWeeks(
     const wStart = new Date(cursor);
     const wEnd = endOfWeek(cursor);
     const isCurrent = startOfWeek(wStart).getTime() === currentWeekStart.getTime();
-    weeks.push({ start: wStart, end: wEnd, label: weekLabel(wStart), isCurrent });
+    weeks.push({
+      start: wStart,
+      end: wEnd,
+      label: weekRangeDisplay(wStart, wEnd),
+      subLabel: weekNumberLabel(wStart),
+      isCurrent,
+    });
     cursor = addDays(wStart, 7);
   }
   const trimmed = options?.maxWeeks ? weeks.slice(0, options.maxWeeks) : weeks;
@@ -941,18 +950,21 @@ function buildWeeks(
     return trimmed.map((w, idx) => ({
       ...w,
       label: `${options.labelPrefix ? `${options.labelPrefix} ` : ""}W${idx + 1}`,
+      subLabel: weekNumberLabel(w.start),
     }));
   }
   if (options?.labelStyle === "range") {
     return trimmed.map((w) => ({
       ...w,
-      label: `${options.labelPrefix ? `${options.labelPrefix} ` : ""}${weekRangeLabel(w.start, w.end)}`,
+      label: `${options.labelPrefix ? `${options.labelPrefix} ` : ""}${weekRangeDisplay(w.start, w.end)}`,
+      subLabel: weekNumberLabel(w.start),
     }));
   }
   if (options?.labelStyle === "day") {
     return trimmed.map((w) => ({
       ...w,
       label: `${options.labelPrefix ? `${options.labelPrefix} ` : ""}${weekTickLabel(w.start)}`,
+      subLabel: weekNumberLabel(w.start),
     }));
   }
   if (options?.labelPrefix) {
@@ -1067,16 +1079,40 @@ function addMonths(date: Date, months: number) {
 
 function weekLabel(start: Date) {
   const end = addDays(start, 6);
-  const startDay = start.getDate();
-  const endDay = end.getDate();
-  const startMonth = start.toLocaleDateString(undefined, { month: "short" });
-  const endMonth = end.toLocaleDateString(undefined, { month: "short" });
-  if (startMonth === endMonth) {
-    return `${startDay}-${endDay} ${startMonth}`;
-  }
-  return `${startDay} ${startMonth}-${endDay} ${endMonth}`;
+  return weekRangeDisplay(start, end);
 }
 
+// Human-readable range used in the column header.
+//   Same month:  "27 – 3 May"
+//   Cross-month: "27 Abr – 3 May"
+function weekRangeDisplay(start: Date, end: Date) {
+  const startDay = start.getDate();
+  const endDay = end.getDate();
+  const startMonth = capitalizeMonth(start);
+  const endMonth = capitalizeMonth(end);
+  if (start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear()) {
+    return `${startDay} – ${endDay} ${endMonth}`;
+  }
+  return `${startDay} ${startMonth} – ${endDay} ${endMonth}`;
+}
+
+function capitalizeMonth(date: Date) {
+  const raw = date.toLocaleDateString(undefined, { month: "short" }).replace(/\.$/, "");
+  return raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+
+// ISO 8601 week number, e.g. "S18".
+function weekNumberLabel(date: Date) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const weekNo = Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+  return `S${weekNo}`;
+}
+
+// Kept for tooltips / accessibility (the dense slash format is fine inline,
+// but no longer surfaced as a column header).
 function weekRangeLabel(start: Date, end: Date) {
   const startDay = start.getDate();
   const endDay = end.getDate();
