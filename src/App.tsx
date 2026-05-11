@@ -1,15 +1,57 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useMemo } from "react";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { api, AuthUser, clearStoredSession, getStoredSession } from "./api/client";
+import { api, AuthUser, Project, clearStoredSession, getStoredSession } from "./api/client";
 import { ThemeToggle } from "./components/ThemeToggle";
+import { Sidebar } from "./components/Sidebar";
 import { Home } from "./pages/Home";
 import { Login } from "./pages/Login";
-import { Project } from "./pages/Project";
+import { Project as ProjectPage } from "./pages/Project";
 import { Workload } from "./pages/Workload";
 
 // Code-split the Canvas page (it pulls in react-force-graph-2d ~600KB).
 const Canvas = lazy(() => import("./pages/Canvas").then((m) => ({ default: m.Canvas })));
+
+function Breadcrumb({ currentUser }: { currentUser: AuthUser | null }) {
+  const location = useLocation();
+  const projectsQuery = useQuery<Project[]>({
+    queryKey: ["projects"],
+    queryFn: api.projects,
+    enabled: !!currentUser,
+  });
+
+  const items = useMemo(() => {
+    const path = location.pathname;
+    if (path === "/home") return [{ label: "Seguimiento" }, { label: "Panel" }];
+    if (path === "/canvas") return [{ label: "Seguimiento" }, { label: "Canvas" }];
+    if (path === "/workload") return [{ label: "Seguimiento" }, { label: "Carga" }];
+    if (path.startsWith("/project/")) {
+      const projectId = decodeURIComponent(path.split("/")[2] || "");
+      const project = projectsQuery.data?.find((p) => p.project_id === projectId);
+      return [
+        { label: "Seguimiento" },
+        { label: "Proyectos", href: "/home" },
+        { label: project?.nombre || "Proyecto" },
+      ];
+    }
+    return [{ label: "Seguimiento" }];
+  }, [location.pathname, projectsQuery.data]);
+
+  return (
+    <div className="gp-crumb">
+      {items.map((c, i) => (
+        <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          {i > 0 && <span className="sep">/</span>}
+          {c.href ? (
+            <Link to={c.href}>{c.label}</Link>
+          ) : (
+            <span className={i === items.length - 1 ? "here" : ""}>{c.label}</span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function App() {
   const location = useLocation();
@@ -17,13 +59,7 @@ function App() {
   const storedSession = getStoredSession();
   const hasSession = !!storedSession?.token;
   const isLogin = location.pathname === "/login";
-  const sectionLabel = location.pathname.startsWith("/project/")
-    ? "Proyecto"
-    : location.pathname === "/workload"
-      ? "Carga"
-      : location.pathname === "/canvas"
-        ? "Canvas"
-        : "Panel";
+
   const meQuery = useQuery<AuthUser>({
     queryKey: ["auth", "me"],
     queryFn: api.me,
@@ -86,59 +122,26 @@ function App() {
   }
 
   return (
-    <div className="app-viewport overflow-hidden bg-surface text-primary">
-      <div className="mx-auto flex h-full w-full max-w-[1800px] flex-col px-3 pb-3 pt-3 sm:px-5 sm:pb-5 sm:pt-4">
-        <header className="app-header flex min-h-14 items-center justify-between gap-3 px-3 py-2 sm:px-5">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="app-logo grid h-8 w-8 place-items-center text-[11px] font-semibold">VPF</div>
-            <div className="min-w-0">
-              <div className="text-[10px] uppercase tracking-[0.24em] text-secondary">Workspace</div>
-              <div className="truncate text-sm font-semibold text-primary">
-                Seguimiento
-                <span className="mx-2 text-secondary">/</span>
-                <span className="text-secondary">{sectionLabel}</span>
-              </div>
-            </div>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-            {currentUser ? (
-              <div className="hidden items-center gap-1 rounded-full border border-border-muted bg-panel px-1 py-1 sm:flex">
-                <Link
-                  to="/canvas"
-                  className={`rounded-full px-3 py-1 text-[11px] ${location.pathname === "/canvas" ? "bg-accent text-white" : "text-secondary"}`}
-                >
-                  Canvas
-                </Link>
-                <Link
-                  to="/home"
-                  className={`rounded-full px-3 py-1 text-[11px] ${location.pathname === "/home" ? "bg-accent text-white" : "text-secondary"}`}
-                >
-                  Panel
-                </Link>
-                {currentUser.can_view_workload ? (
-                  <Link
-                    to="/workload"
-                    className={`rounded-full px-3 py-1 text-[11px] ${location.pathname === "/workload" ? "bg-accent text-white" : "text-secondary"}`}
-                  >
-                    Carga
-                  </Link>
-                ) : null}
-              </div>
-            ) : null}
-            {currentUser ? (
-              <div className="hidden items-center gap-2 rounded-full border border-border-muted bg-panel px-3 py-1 text-[11px] text-secondary sm:flex">
-                <span className="font-medium text-primary">{currentUser.display_name}</span>
-              </div>
-            ) : null}
-            <button type="button" className="ui-button ui-button--ghost" onClick={handleLogout}>
-              Salir
-            </button>
+    <div className="app-viewport bg-surface text-primary">
+      <div className="app-shell">
+        <Sidebar currentUser={currentUser} onLogout={handleLogout} />
+        <main className="gp-main">
+          <div className="gp-topbar">
+            <Breadcrumb currentUser={currentUser} />
+            <div className="gp-spacer" />
             <ThemeToggle />
+            {currentUser && (
+              <span className="gp-user-chip">
+                <span className="gp-avatar color-1">
+                  {(currentUser.display_name || "?").slice(0, 2).toUpperCase()}
+                </span>
+                <span className="gp-truncate" style={{ maxWidth: 140 }}>
+                  {currentUser.display_name.split(" ")[0]}
+                </span>
+              </span>
+            )}
           </div>
-        </header>
-
-        <main className="min-h-0 flex-1 overflow-y-auto pt-3 sm:pt-4">
-          <div key={location.pathname} className="page-transition min-h-full">
+          <div key={location.pathname} className="page-transition" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
             <Routes location={location}>
               <Route path="/login" element={<Login />} />
               <Route path="/home" element={<Home />} />
@@ -147,7 +150,7 @@ function App() {
                 element={
                   <Suspense
                     fallback={
-                      <div className="glass grid min-h-[60vh] place-items-center text-sm text-secondary">
+                      <div className="gp-content" style={{ display: "grid", placeItems: "center", minHeight: "60vh", color: "var(--text-secondary)" }}>
                         Cargando canvas...
                       </div>
                     }
@@ -156,7 +159,7 @@ function App() {
                   </Suspense>
                 }
               />
-              <Route path="/project/:projectId" element={<Project currentUser={currentUser} />} />
+              <Route path="/project/:projectId" element={<ProjectPage currentUser={currentUser} />} />
               <Route
                 path="/workload"
                 element={

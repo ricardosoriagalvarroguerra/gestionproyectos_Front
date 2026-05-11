@@ -28,19 +28,43 @@ export function Login() {
   };
 
   return (
-    <div className="mx-auto flex w-full max-w-[560px] items-center justify-center">
-      <section className="glass w-full px-7 py-8 sm:px-8 sm:py-9">
-        <div className="space-y-2">
-          <div className="text-[11px] uppercase tracking-[0.28em] text-secondary">Acceso</div>
-          <h2 className="text-[28px] leading-none font-semibold sm:text-[32px]">Ingreso interno</h2>
+    <div className="mx-auto flex w-full max-w-[440px] items-center justify-center">
+      <section
+        className="w-full"
+        style={{
+          background: "var(--bg-panel)",
+          border: "1px solid var(--border-muted)",
+          borderRadius: 12,
+          padding: "32px 28px",
+        }}
+      >
+        <div className="gp-row" style={{ gap: 10, marginBottom: 18 }}>
+          <span
+            className="app-logo"
+            style={{ width: 28, height: 28, display: "grid", placeItems: "center", fontSize: 11 }}
+          >
+            VPF
+          </span>
+          <div>
+            <div className="page-eyebrow">Workspace</div>
+            <div style={{ fontSize: 14, fontWeight: 500 }}>Seguimiento</div>
+          </div>
         </div>
-        <form onSubmit={submit} className="mt-8 space-y-5">
-          <label className="block space-y-2 text-sm text-secondary">
-            <span className="block font-medium text-primary">Usuario o nombre</span>
+        <h2 className="page-title" style={{ fontSize: 24, margin: "8px 0 4px" }}>
+          Ingreso interno
+        </h2>
+        <p className="page-subtitle" style={{ marginBottom: 24 }}>
+          Acceso al panel de gestión de proyectos.
+        </p>
+        <form onSubmit={submit} className="gp-vstack" style={{ gap: 16 }}>
+          <label className="gp-vstack" style={{ gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>
+              Usuario o nombre
+            </span>
             <input
               type="text"
               list={users.length ? "login-users" : undefined}
-              className="ui-input w-full"
+              className="ui-input"
               value={userKey}
               onChange={(e) => setUserKey(e.target.value)}
               placeholder="Ej. ricardo soria galvarro"
@@ -55,15 +79,17 @@ export function Login() {
                 ))}
               </datalist>
             ) : null}
-            <span className="block text-xs text-secondary">
-              Puedes escribir tu `user_key` aunque el directorio público esté deshabilitado.
+            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+              Puedes escribir tu user_key aunque el directorio público esté deshabilitado.
             </span>
           </label>
-          <label className="block space-y-2 text-sm text-secondary">
-            <span className="block font-medium text-primary">Contraseña</span>
+          <label className="gp-vstack" style={{ gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 500, color: "var(--text-primary)" }}>
+              Contraseña
+            </span>
             <input
               type="password"
-              className="ui-input w-full"
+              className="ui-input"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Ingresa tu contraseña temporal"
@@ -71,11 +97,19 @@ export function Login() {
             />
           </label>
           {error ? (
-            <div className="rounded-xl border border-[rgba(226,85,85,0.24)] bg-[rgba(226,85,85,0.08)] px-3 py-3 text-sm text-red-400">
+            <div
+              style={{
+                background: "var(--accent-soft)",
+                color: "var(--accent-text)",
+                padding: "10px 12px",
+                borderRadius: 8,
+                fontSize: 13,
+              }}
+            >
               {error}
             </div>
           ) : null}
-          <button type="submit" className="ui-button ui-button--primary w-full">
+          <button type="submit" className="ui-button ui-button--primary" style={{ width: "100%" }}>
             Entrar
           </button>
         </form>

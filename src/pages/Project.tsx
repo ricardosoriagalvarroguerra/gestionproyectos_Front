@@ -213,7 +213,7 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
   }
 
   return (
-    <div className="min-h-full overflow-hidden flex flex-col gap-4">
+    <div className="gp-content min-h-full overflow-hidden flex flex-col gap-4">
       <div className="glass relative overflow-hidden p-4 sm:p-5">
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">

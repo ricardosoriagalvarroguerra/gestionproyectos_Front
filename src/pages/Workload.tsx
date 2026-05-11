@@ -133,7 +133,7 @@ export function Workload({ currentUser }: { currentUser: AuthUser | null }) {
   const weeksData = workloadQuery.data?.weeks || [];
 
   return (
-    <div className="min-h-full space-y-4 sm:space-y-5">
+    <div className="gp-content min-h-full space-y-4 sm:space-y-5">
       {/* Header */}
       <section className="glass overflow-hidden px-5 py-5 sm:px-6 sm:py-6">
         <p className="wl-overline">Cronograma ejecutivo</p>
