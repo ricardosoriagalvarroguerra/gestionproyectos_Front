@@ -3367,3 +3367,35 @@ body {
 }
 .canvas-detail-cta { margin-top: 14px; width: 100%; }
 
+
+/* Canvas stage subtle grid pattern (matches design's 40px grid).
+   ForceGraph2D draws on its own canvas above this layer; the grid
+   peeks through the empty space. */
+.canvas-stage {
+  background-image:
+    linear-gradient(var(--border-muted) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border-muted) 1px, transparent 1px);
+  background-size: 40px 40px, 40px 40px;
+  background-position: -1px -1px, -1px -1px;
+}
+.theme-light .canvas-stage,
+.theme-dark .canvas-stage {
+  /* Inherit border-muted color from theme */
+}
+
+/* "yo" indicator badge on user node when shown in canvas (top-right red dot). */
+.canvas-yo-badge {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-text);
+  background: var(--accent-soft);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+

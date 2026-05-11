@@ -144,7 +144,7 @@ function App() {
           <div key={location.pathname} className="page-transition" style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
             <Routes location={location}>
               <Route path="/login" element={<Login />} />
-              <Route path="/home" element={<Home />} />
+              <Route path="/home" element={<Home currentUser={currentUser} />} />
               <Route
                 path="/canvas"
                 element={

@@ -1,10 +1,10 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { api, HomeAlert, HomeOverviewResponse } from "../api/client";
+import { api, AuthUser, HomeAlert, HomeOverviewResponse } from "../api/client";
 import { formatDateLabel, toTimeValue } from "../utils/display";
 
-type FilterKey = "todas" | "vencidas" | "proximas" | "importantes";
+type FilterKey = "todas" | "vencidas" | "semana" | "urgentes";
 
 const greeting = () => {
   const h = new Date().getHours();
@@ -23,7 +23,8 @@ const todayLabel = () => {
   });
 };
 
-export function Home() {
+export function Home({ currentUser }: { currentUser: AuthUser | null }) {
+  const firstName = (currentUser?.display_name || "").trim().split(/\s+/)[0] || "";
   const navigate = useNavigate();
   const [filter, setFilter] = useState<FilterKey>("todas");
   const [search, setSearch] = useState("");
@@ -39,9 +40,21 @@ export function Home() {
   const visibleAlerts = useMemo(() => {
     let xs = alerts.slice();
     if (filter === "vencidas") xs = xs.filter((a) => a.alert_type === "overdue");
-    else if (filter === "proximas") xs = xs.filter((a) => a.alert_type === "upcoming");
-    else if (filter === "importantes") {
-      xs = xs.filter((a) => (a.importancia || "").toLowerCase().includes("alta"));
+    else if (filter === "semana") {
+      const now = Date.now();
+      const DAY = 86_400_000;
+      xs = xs.filter((a) => {
+        if (a.alert_type === "overdue") return false;
+        const due = toTimeValue(a.fecha_end || a.fecha_start);
+        if (!Number.isFinite(due)) return false;
+        const days = Math.round((due - now) / DAY);
+        return days >= 0 && days <= 7;
+      });
+    } else if (filter === "urgentes") {
+      xs = xs.filter((a) => {
+        const imp = (a.importancia || "").toLowerCase();
+        return imp.includes("alta") || imp.includes("urgent") || imp.includes("crit");
+      });
     }
     if (search) {
       const q = search.toLowerCase();
@@ -59,11 +72,26 @@ export function Home() {
   const grouped = useMemo(() => {
     const buckets: Record<string, HomeAlert[]> = {
       Vencidas: [],
+      "Esta semana": [],
       "Próximas": [],
+      "Más adelante": [],
     };
+    const now = Date.now();
+    const DAY = 86_400_000;
     visibleAlerts.forEach((a) => {
-      if (a.alert_type === "overdue") buckets.Vencidas.push(a);
-      else buckets["Próximas"].push(a);
+      if (a.alert_type === "overdue") {
+        buckets.Vencidas.push(a);
+        return;
+      }
+      const due = toTimeValue(a.fecha_end || a.fecha_start);
+      if (!Number.isFinite(due)) {
+        buckets["Próximas"].push(a);
+        return;
+      }
+      const days = Math.round((due - now) / DAY);
+      if (days <= 7) buckets["Esta semana"].push(a);
+      else if (days <= 30) buckets["Próximas"].push(a);
+      else buckets["Más adelante"].push(a);
     });
     return Object.entries(buckets).filter(([, v]) => v.length > 0);
   }, [visibleAlerts]);
@@ -76,7 +104,7 @@ export function Home() {
     <div className="gp-content">
       <div className="page-eyebrow">Proyectos · Vista general</div>
       <h1 className="page-title">
-        {greeting()}, {projects.length ? "Ricardo" : ""}
+        {greeting()}{firstName ? `, ${firstName}` : ""}
       </h1>
       <p className="page-subtitle">
         <span style={{ textTransform: "capitalize" }}>{todayLabel()}</span>
@@ -184,9 +212,9 @@ export function Home() {
               {(
                 [
                   ["todas", "Todas"],
-                  ["proximas", "Próximas"],
+                  ["semana", "Esta semana"],
                   ["vencidas", "Vencidas"],
-                  ["importantes", "Importantes"],
+                  ["urgentes", "Urgentes"],
                 ] as [FilterKey, string][]
               ).map(([k, l]) => (
                 <button
@@ -288,12 +316,32 @@ export function Home() {
                         </div>
                       </div>
                       <div style={{ textAlign: "right", minWidth: 110 }}>
-                        <div className="mono" style={{ fontSize: 12, color: isOverdue ? "var(--accent-text)" : "var(--text-secondary)" }}>
+                        <div
+                          className="mono"
+                          style={{ fontSize: 12, color: isOverdue ? "var(--accent-text)" : "var(--text-secondary)" }}
+                        >
                           {formatDateLabel(t.fecha_end || t.fecha_start)}
                         </div>
-                        <div className="mono" style={{ fontSize: 10.5, color: "var(--text-muted)" }}>
-                          {isOverdue ? "Vencida" : "Próxima"}
-                        </div>
+                        {(() => {
+                          const due = toTimeValue(t.fecha_end || t.fecha_start);
+                          if (!Number.isFinite(due)) return null;
+                          const days = Math.round((due - Date.now()) / 86_400_000);
+                          if (isOverdue && days < 0) {
+                            return (
+                              <div className="mono" style={{ fontSize: 10.5, color: "var(--text-muted)" }}>
+                                −{Math.abs(days)} d
+                              </div>
+                            );
+                          }
+                          if (!isOverdue && days >= 0) {
+                            return (
+                              <div className="mono" style={{ fontSize: 10.5, color: "var(--text-muted)" }}>
+                                en {days} d
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
                     </button>
                   );

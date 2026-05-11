@@ -921,7 +921,7 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
         </svg>
       </button>
 
-      <section className="canvas-stage" style={{ background: palette.background }}>
+      <section className="canvas-stage" style={{ backgroundColor: palette.background }}>
         <div ref={containerRef} className="absolute inset-0">
           {canvasQuery.isLoading ? (
             <div
@@ -947,7 +947,7 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
               graphData={graphData}
               width={dimensions.w}
               height={dimensions.h}
-              backgroundColor={palette.background}
+              backgroundColor="rgba(0,0,0,0)"
               cooldownTicks={250}
               cooldownTime={10000}
               d3AlphaDecay={0.022}

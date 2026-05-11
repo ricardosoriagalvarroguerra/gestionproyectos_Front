@@ -212,6 +212,8 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
     return <p className="text-secondary">No se encontró el proyecto solicitado.</p>;
   }
 
+  const teamMembers = deriveTeamMembers(projectTasksQuery.data || []);
+
   return (
     <ProjectLayout
       project={project}
@@ -220,6 +222,7 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
       tasksCount={projectTasksQuery.data?.length ?? project.tasks_total ?? 0}
       overdueCount={dashboardQuery.data?.kpis?.tasks_overdue ?? project.tasks_overdue ?? 0}
       dashboard={dashboardQuery.data}
+      teamMembers={teamMembers}
       search={productFilters.search || ""}
       onSearch={(term) => {
         setProductFilters({ ...productFilters, search: term });
@@ -298,6 +301,35 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
   );
 }
 
+type TeamMember = { key: string; label: string; initials: string };
+
+function deriveTeamMembers(tasks: Task[]): TeamMember[] {
+  const seen = new Map<string, TeamMember>();
+  const collect = (value: PersonValue | undefined | null) => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach(collect);
+      return;
+    }
+    const name = personLabel(value);
+    if (!name) return;
+    const key = name.trim().toLowerCase();
+    if (seen.has(key)) return;
+    const initials = name
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((w) => w[0] || "")
+      .join("")
+      .toUpperCase() || "?";
+    seen.set(key, { key, label: name, initials });
+  };
+  tasks.forEach((t) => {
+    collect(t.responsable as PersonValue);
+    collect(t.asignado as PersonValue);
+  });
+  return [...seen.values()];
+}
+
 type LayoutProps = {
   project: ProjectType;
   currentUser: AuthUser | null;
@@ -305,6 +337,7 @@ type LayoutProps = {
   tasksCount: number;
   overdueCount: number;
   dashboard?: DashboardResponse;
+  teamMembers: TeamMember[];
   search: string;
   onSearch: (term: string) => void;
   onOpenNotion: () => void;
@@ -330,6 +363,7 @@ function ProjectLayout({
   tasksCount,
   overdueCount,
   dashboard,
+  teamMembers,
   search,
   onSearch,
   onOpenNotion,
@@ -390,6 +424,44 @@ function ProjectLayout({
             </span>
             {overdueCount > 0 && (
               <span className="gp-pill danger">{overdueCount} vencidas</span>
+            )}
+            {teamMembers.length > 0 && (
+              <div
+                className="gp-row"
+                style={{ marginLeft: 10, gap: 0 }}
+                title={teamMembers.map((m) => m.label).join(", ")}
+              >
+                {teamMembers.slice(0, 4).map((m, i) => (
+                  <span
+                    key={m.key}
+                    className={`gp-avatar color-${(i % 5) + 1}`}
+                    style={{
+                      width: 22,
+                      height: 22,
+                      marginLeft: i === 0 ? 0 : -6,
+                      border: "1.5px solid var(--bg-surface)",
+                    }}
+                  >
+                    {m.initials}
+                  </span>
+                ))}
+                {teamMembers.length > 4 && (
+                  <span
+                    className="gp-avatar"
+                    style={{
+                      width: 22,
+                      height: 22,
+                      marginLeft: -6,
+                      border: "1.5px solid var(--bg-surface)",
+                      background: "var(--bg-soft)",
+                      color: "var(--text-secondary)",
+                      fontSize: 9,
+                    }}
+                  >
+                    +{teamMembers.length - 4}
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </div>

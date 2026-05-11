@@ -67,6 +67,8 @@ export function Workload({ currentUser }: { currentUser: AuthUser | null }) {
   const [search, setSearch] = useState("");
   const [onlyLoginUsers, setOnlyLoginUsers] = useState(true);
   const [teamFilter, setTeamFilter] = useState<string>("all");
+  const [scope, setScope] = useState<"mes" | "trimestre">("mes");
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [collapsedAreas, setCollapsedAreas] = useState<Set<string>>(new Set());
   const [selectedUserKey, setSelectedUserKey] = useState<string | null>(null);
   const [profileUserKey, setProfileUserKey] = useState<string | null>(null);
@@ -179,6 +181,28 @@ export function Workload({ currentUser }: { currentUser: AuthUser | null }) {
     [filteredUsers]
   );
 
+  const exportCsv = () => {
+    if (!filteredUsers.length || !weeksData.length) return;
+    const header = ["Usuario", ...weeksData.map((w) => `${w.label} (${w.range_label})`)];
+    const rows = filteredUsers.map((u) => [
+      u.display_name,
+      ...u.weeks.map((c) => String(c.total)),
+    ]);
+    const csv = [header, ...rows]
+      .map((row) => row.map((v) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)).join(","))
+      .join("\r\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `carga-${year}-${String(month).padStart(2, "0")}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // scope reserved for future trimester view
+  void scope;
+
   const intensityColor = (value: number) => {
     if (value === 0) return null;
     const t = Math.min(1, value / totalMax);
@@ -198,40 +222,83 @@ export function Workload({ currentUser }: { currentUser: AuthUser | null }) {
       <div className="page-eyebrow">Equipo · Carga semanal</div>
       <h1 className="page-title">Carga semanal por usuario</h1>
       <p className="page-subtitle">
-        Distribución de proyectos, productos y tareas por semana.{" "}
-        <span className="gp-muted">
-          {periodLabel} · {filteredUsers.length} usuarios visibles
-        </span>
+        Ítems asignados (proyectos · productos · tareas) por semana. {periodLabel} ·{" "}
+        {filteredUsers.length} usuarios.
       </p>
 
-      {/* Controls row */}
-      <div className="gp-row" style={{ gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
+      {/* Controls row — single date button + Equipo segment + (right) scope + Exportar */}
+      <div className="gp-row" style={{ gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
         <div className="gp-row" style={{ gap: 6 }}>
           <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Mes</span>
-          <select
-            className="ui-select"
-            style={{ width: 130, minHeight: 30, paddingRight: 28 }}
-            value={month}
-            onChange={(e) => setMonth(Number(e.target.value))}
-          >
-            {MONTHS.map((m) => (
-              <option key={m.value} value={m.value}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-          <select
-            className="ui-select"
-            style={{ width: 92, minHeight: 30, paddingRight: 28 }}
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-          >
-            {Array.from({ length: 5 }, (_, i) => today.getFullYear() - 1 + i).map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
+          <div style={{ position: "relative" }}>
+            <button
+              type="button"
+              className="ui-button"
+              style={{ height: 30, padding: "0 12px" }}
+              onClick={() => setDatePickerOpen((v) => !v)}
+            >
+              <span>
+                {MONTHS[month - 1].label} {year}
+              </span>
+              <svg
+                width={10}
+                height={10}
+                viewBox="0 0 18 18"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ marginLeft: 4 }}
+              >
+                <path d="m6 4 4 4-4 4" transform="rotate(90 9 9)" />
+              </svg>
+            </button>
+            {datePickerOpen && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: "calc(100% + 4px)",
+                  left: 0,
+                  zIndex: 30,
+                  background: "var(--bg-panel)",
+                  border: "1px solid var(--border-muted)",
+                  borderRadius: 8,
+                  boxShadow: "var(--shadow-floating)",
+                  padding: 10,
+                  display: "flex",
+                  gap: 6,
+                  minWidth: 240,
+                }}
+                onMouseLeave={() => setDatePickerOpen(false)}
+              >
+                <select
+                  className="ui-select"
+                  style={{ flex: 1, minHeight: 32 }}
+                  value={month}
+                  onChange={(e) => setMonth(Number(e.target.value))}
+                >
+                  {MONTHS.map((m) => (
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  className="ui-select"
+                  style={{ width: 92, minHeight: 32 }}
+                  value={year}
+                  onChange={(e) => setYear(Number(e.target.value))}
+                >
+                  {Array.from({ length: 5 }, (_, i) => today.getFullYear() - 1 + i).map((v) => (
+                    <option key={v} value={v}>
+                      {v}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
         </div>
         <div className="gp-row" style={{ gap: 6 }}>
           <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Equipo</span>
@@ -249,9 +316,43 @@ export function Workload({ currentUser }: { currentUser: AuthUser | null }) {
           </div>
         </div>
         <span className="gp-spacer-flex" />
+        <div className="ui-segmented">
+          {(["mes", "trimestre"] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              className={`ui-segment ${scope === s ? "is-active" : ""}`}
+              onClick={() => setScope(s)}
+              title={s === "trimestre" ? "Vista trimestral (próximamente)" : "Vista mensual"}
+              disabled={s === "trimestre"}
+              style={s === "trimestre" ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
+            >
+              {s === "mes" ? "Mes" : "Trimestre"}
+            </button>
+          ))}
+        </div>
+        <button type="button" className="ui-button" style={{ height: 30 }} onClick={exportCsv}>
+          <svg
+            width={13}
+            height={13}
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M9 3v8M9 11l3-3M9 11 6 8M3 14h12" />
+          </svg>
+          Exportar
+        </button>
+      </div>
+
+      {/* Secondary filter row */}
+      <div className="gp-row" style={{ gap: 10, marginBottom: 18, flexWrap: "wrap" }}>
         <input
           className="ui-input"
-          style={{ width: 220, minHeight: 30 }}
+          style={{ width: 240, minHeight: 30 }}
           placeholder="Filtrar usuarios…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -262,9 +363,7 @@ export function Workload({ currentUser }: { currentUser: AuthUser | null }) {
             gap: 6,
             fontSize: 12,
             color: "var(--text-secondary)",
-            background: "var(--bg-muted)",
-            padding: "5px 10px",
-            borderRadius: 6,
+            padding: "5px 4px",
             cursor: "pointer",
           }}
         >
@@ -279,47 +378,71 @@ export function Workload({ currentUser }: { currentUser: AuthUser | null }) {
       </div>
 
       {/* Summary band */}
-      <div className="gp-card" style={{ padding: "16px 18px", marginBottom: 20 }}>
-        <div className="gp-row" style={{ gap: 24, flexWrap: "wrap" }}>
+      <div className="gp-card" style={{ padding: "16px 20px", marginBottom: 20 }}>
+        <div className="gp-row" style={{ gap: 32, flexWrap: "wrap", alignItems: "center" }}>
           <div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--text-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                marginBottom: 4,
+              }}
+            >
               Promedio del equipo
             </div>
-            <div className="mono" style={{ fontSize: 24, fontWeight: 500 }}>
+            <div className="mono" style={{ fontSize: 24, fontWeight: 500, lineHeight: 1 }}>
               {weeklyAvg}
-              <span style={{ fontSize: 13, color: "var(--text-muted)" }}> ítems/sem</span>
+              <span style={{ fontSize: 13, color: "var(--text-muted)", marginLeft: 6 }}>ítems/sem</span>
             </div>
           </div>
-          <div style={{ height: 32, width: 1, background: "var(--border-muted)" }} />
+          <div style={{ height: 36, width: 1, background: "var(--border-muted)" }} />
           <div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--text-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                marginBottom: 4,
+              }}
+            >
               Sobre-asignados
             </div>
-            <div className="mono" style={{ fontSize: 24, fontWeight: 500, color: "var(--accent-text)" }}>
+            <div className="mono" style={{ fontSize: 24, fontWeight: 500, color: "var(--accent-text)", lineHeight: 1 }}>
               {overAssigned}
             </div>
           </div>
-          <div style={{ height: 32, width: 1, background: "var(--border-muted)" }} />
+          <div style={{ height: 36, width: 1, background: "var(--border-muted)" }} />
           <div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+            <div
+              style={{
+                fontSize: 11,
+                color: "var(--text-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                marginBottom: 4,
+              }}
+            >
               Sin asignación
             </div>
-            <div className="mono" style={{ fontSize: 24, fontWeight: 500, color: "var(--text-muted)" }}>
+            <div className="mono" style={{ fontSize: 24, fontWeight: 500, color: "var(--text-muted)", lineHeight: 1 }}>
               {idle}
             </div>
           </div>
           <span className="gp-spacer-flex" />
-          <div className="gp-row" style={{ gap: 12, fontSize: 11.5, color: "var(--text-muted)" }}>
-            <div className="gp-row" style={{ gap: 4 }}>
-              <span style={{ width: 14, height: 10, background: "var(--info-soft)", borderRadius: 2 }} />
+          <div className="gp-row" style={{ gap: 14, fontSize: 11.5, color: "var(--text-muted)" }}>
+            <div className="gp-row" style={{ gap: 6 }}>
+              <span style={{ width: 16, height: 10, background: "var(--info-soft)", borderRadius: 2 }} />
               &lt;40%
             </div>
-            <div className="gp-row" style={{ gap: 4 }}>
-              <span style={{ width: 14, height: 10, background: "var(--info)", borderRadius: 2 }} />
+            <div className="gp-row" style={{ gap: 6 }}>
+              <span style={{ width: 16, height: 10, background: "var(--info)", borderRadius: 2 }} />
               40-75%
             </div>
-            <div className="gp-row" style={{ gap: 4 }}>
-              <span style={{ width: 14, height: 10, background: "var(--accent)", borderRadius: 2 }} />
+            <div className="gp-row" style={{ gap: 6 }}>
+              <span style={{ width: 16, height: 10, background: "var(--accent)", borderRadius: 2 }} />
               &gt;75%
             </div>
           </div>
