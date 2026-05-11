@@ -193,7 +193,7 @@ export function Sidebar({ currentUser, onLogout }: SidebarProps) {
         </div>
       )}
 
-      <div style={{ flex: 1 }} />
+      <div className="gp-sidebar-spacer" />
 
       <div className="gp-section" style={{ paddingTop: 8 }}>Cuenta</div>
       {currentUser && (

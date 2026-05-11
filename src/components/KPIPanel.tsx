@@ -18,7 +18,7 @@ export function KPIPanel({ data }: Props) {
   ];
 
   return (
-    <div className="kpi-band" style={{ gridTemplateColumns: "repeat(6, minmax(0, 1fr))", margin: 0 }}>
+    <div className="kpi-band kpi-band--project">
       {items.map((s) => (
         <div key={s.label}>
           <div className="lbl">{s.label}</div>

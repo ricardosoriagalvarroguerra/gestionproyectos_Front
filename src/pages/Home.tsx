@@ -114,7 +114,7 @@ export function Home({ currentUser }: { currentUser: AuthUser | null }) {
         <span className="gp-muted">{totalOverdue} vencidas</span>
       </p>
 
-      <div className="kpi-band" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+      <div className="kpi-band">
         <div>
           <div className="lbl">Proyectos activos</div>
           <div className="val">
@@ -139,7 +139,7 @@ export function Home({ currentUser }: { currentUser: AuthUser | null }) {
       {isLoading && <p className="gp-muted" style={{ fontSize: 13 }}>Cargando proyectos…</p>}
       {isError && <p style={{ color: "var(--accent-text)", fontSize: 13 }}>No se pudieron cargar proyectos.</p>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0,1fr)", gap: 24 }}>
+      <div className="home-overview-grid">
         <div>
           <div className="section-title" style={{ marginTop: 0 }}>
             Proyectos<span className="count">{projects.length}</span>
@@ -196,13 +196,13 @@ export function Home({ currentUser }: { currentUser: AuthUser | null }) {
         </div>
 
         <div>
-          <div className="gp-row" style={{ marginBottom: 10 }}>
+          <div className="gp-row home-focus-toolbar" style={{ marginBottom: 10 }}>
             <div className="section-title" style={{ margin: 0 }}>
               En foco<span className="count">{visibleAlerts.length}</span>
             </div>
             <span className="gp-spacer-flex" />
             <input
-              className="ui-input"
+              className="ui-input home-focus-search"
               style={{ width: 200, minHeight: 30 }}
               placeholder="Buscar tarea…"
               value={search}

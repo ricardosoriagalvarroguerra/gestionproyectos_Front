@@ -233,12 +233,13 @@ export function ProjectCronograma({ data, mode, onModeChange, loading }: Props) 
     }
   };
 
-  const colTemplate = `260px repeat(${weeks.length}, minmax(70px, 1fr))`;
+  const colTemplate = `var(--cronograma-label-col, 260px) repeat(${weeks.length}, minmax(70px, 1fr))`;
+  const gridMinWidth = `calc(var(--cronograma-label-col, 260px) + ${weeks.length * 70}px)`;
 
   return (
     <div className={fullscreen ? "gp-cronograma-fullscreen" : ""}>
       {/* Controls row */}
-      <div className="gp-row" style={{ marginBottom: 12, gap: 10 }}>
+      <div className="gp-row gp-cronograma-toolbar" style={{ marginBottom: 12, gap: 10 }}>
         <div className="ui-segmented">
           <button
             type="button"
@@ -337,7 +338,7 @@ export function ProjectCronograma({ data, mode, onModeChange, loading }: Props) 
                 display: "grid",
                 gridTemplateColumns: colTemplate,
                 borderBottom: "1px solid var(--border-muted)",
-                minWidth: 260 + weeks.length * 70,
+                minWidth: gridMinWidth,
               }}
             >
               <div
@@ -407,7 +408,7 @@ export function ProjectCronograma({ data, mode, onModeChange, loading }: Props) 
                     gridTemplateColumns: colTemplate,
                     background: "var(--bg-muted)",
                     borderBottom: "1px solid var(--border-muted)",
-                    minWidth: 260 + weeks.length * 70,
+                    minWidth: gridMinWidth,
                   }}
                 >
                   <div
@@ -446,7 +447,7 @@ export function ProjectCronograma({ data, mode, onModeChange, loading }: Props) 
                         display: "grid",
                         gridTemplateColumns: colTemplate,
                         borderBottom: "1px solid var(--border-muted)",
-                        minWidth: 260 + weeks.length * 70,
+                        minWidth: gridMinWidth,
                       }}
                     >
                       <div
