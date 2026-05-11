@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import ForceGraph2D, { ForceGraphMethods } from "react-force-graph-2d";
 import {
   api,
   AuthUser,
@@ -12,6 +11,7 @@ import {
   CanvasUserOption,
 } from "../api/client";
 import { formatDateLabel } from "../utils/display";
+import { CanvasGraph } from "../components/CanvasGraph";
 
 type GraphNode = CanvasNode & {
   x?: number;
@@ -183,8 +183,7 @@ const LAYOUT_OPTIONS: { value: LayoutMode; label: string }[] = [
 
 export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const graphRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(undefined);
-  const [dimensions, setDimensions] = useState<{ w: number; h: number }>({ w: 800, h: 600 });
+  // SVG-based CanvasGraph manages its own size; legacy refs removed.
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedUserKeys, setSelectedUserKeys] = useState<string[]>([]);
@@ -222,34 +221,6 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     },
     enabled: effectiveUserKeys.length > 0,
   });
-
-  // Resize handler so the graph follows the canvas container size.
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const update = () => {
-      const rect = el.getBoundingClientRect();
-      setDimensions({ w: Math.max(320, rect.width), h: Math.max(360, rect.height) });
-    };
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    window.addEventListener("resize", update);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", update);
-    };
-  }, []);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const t = window.setTimeout(() => {
-      const rect = el.getBoundingClientRect();
-      setDimensions({ w: Math.max(320, rect.width), h: Math.max(360, rect.height) });
-    }, 320);
-    return () => window.clearTimeout(t);
-  }, [sidebarOpen]);
 
   // Color mapping: each selected user gets a stable palette slot in multi mode.
   // Light theme uses a softer (less saturated) palette than dark.
@@ -347,244 +318,11 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
     return map;
   }, [graphData]);
 
-  const isFocused = (id: string) => {
-    if (!hoveredId) return true;
-    if (hoveredId === id) return true;
-    return adjacency.get(hoveredId)?.has(id) ?? false;
-  };
-
-  const isLinkActive = (link: GraphLink) => {
-    if (!hoveredId) return true;
-    return nodeId(link.source) === hoveredId || nodeId(link.target) === hoveredId;
-  };
-
-  // Pin nodes in concentric rings for hierarchy mode, release for constellation.
-  const applyHierarchyLayout = () => {
-    const nodes = graphData.nodes;
-    if (nodes.length === 0) return;
-
-    const place = (arr: GraphNode[], radius: number, offset = 0) => {
-      const len = Math.max(1, arr.length);
-      arr.forEach((n, i) => {
-        const angle = (2 * Math.PI * i) / len - Math.PI / 2 + offset;
-        const fx = Math.cos(angle) * radius;
-        const fy = Math.sin(angle) * radius;
-        n.fx = fx;
-        n.fy = fy;
-        n.x = fx;
-        n.y = fy;
-        n.vx = 0;
-        n.vy = 0;
-      });
-    };
-
-    const users = nodes.filter((n) => n.type === "user");
-    const tasks = nodes.filter((n) => n.type === "task");
-    const products = nodes.filter((n) => n.type === "product");
-    const projects = nodes.filter((n) => n.type === "project");
-
-    // Tasks at the inner ring, products mid, projects outer; users in the very center.
-    const userRadius = users.length > 1 ? 50 : 0;
-    place(users, userRadius);
-    if (tasks.length > 0) place(tasks, 170, 0.1);
-    if (products.length > 0) place(products, 320, 0.05);
-    if (projects.length > 0) place(projects, 480);
-  };
-
-  const releaseHierarchyLayout = () => {
-    graphData.nodes.forEach((n) => {
-      delete n.fx;
-      delete n.fy;
-    });
-  };
-
-  // Tune force layout based on mode + density.
-  useEffect(() => {
-    const fg = graphRef.current;
-    if (!fg) return;
-
-    type Adjustable = {
-      strength?: (s: number) => unknown;
-      distance?: (d: number) => unknown;
-    };
-    const charge = fg.d3Force("charge") as unknown as Adjustable | undefined;
-    const link = fg.d3Force("link") as unknown as Adjustable | undefined;
-
-    if (layoutMode === "hierarchy") {
-      // Soft forces, mostly the rings hold positions because nodes are pinned.
-      if (charge && typeof charge.strength === "function") charge.strength(-30);
-      if (link && typeof link.distance === "function") link.distance(60);
-      applyHierarchyLayout();
-    } else {
-      releaseHierarchyLayout();
-      if (charge && typeof charge.strength === "function") {
-        const n = Math.max(1, graphData.nodes.length);
-        // Bigger nodes need proportionally more breathing room.
-        const base = granularity === "tasks" ? -1900 : granularity === "products" ? -3000 : -4000;
-        const scaled = base * Math.min(2.5, Math.max(0.9, 40 / Math.sqrt(n)));
-        charge.strength(scaled);
-      }
-      const chargeAny = charge as unknown as { theta?: (t: number) => unknown; distanceMax?: (d: number) => unknown };
-      if (chargeAny && typeof chargeAny.distanceMax === "function") {
-        chargeAny.distanceMax(3200);
-      }
-      if (link && typeof link.distance === "function") {
-        const distance = granularity === "tasks" ? 480 : granularity === "products" ? 720 : 920;
-        link.distance(distance);
-      }
-      const linkAny = link as unknown as { strength?: (s: number) => unknown };
-      if (linkAny && typeof linkAny.strength === "function") {
-        // Even softer pull so the long distances aren't snapped back.
-        linkAny.strength(0.18);
-      }
-    }
-
-    if (graphData.nodes.length > 0) {
-      fg.d3ReheatSimulation?.();
-      const t = window.setTimeout(() => fg.zoomToFit?.(700, 140), 250);
-      return () => window.clearTimeout(t);
-    }
-  }, [graphData.nodes.length, granularity, layoutMode, overlapFilter]);
-
-  const handleNodeClick = (node: GraphNode) => {
-    // Open detail panel inline; the panel has its own "Abrir en Notion" button.
-    setSelectedNodeId(node.id);
-    const fg = graphRef.current;
-    if (fg && Number.isFinite(node.x) && Number.isFinite(node.y)) {
-      fg.centerAt(node.x as number, node.y as number, 600);
-    }
-  };
-
-  const drawNode = (
-    node: GraphNode,
-    ctx: CanvasRenderingContext2D,
-    globalScale: number
-  ) => {
-    if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
-    const x = node.x as number;
-    const y = node.y as number;
-    const baseRadius = nodeBaseRadius(node);
-    const focused = isFocused(node.id);
-    const isHover = hoveredId === node.id;
-    const isSelected = selectedNodeId === node.id;
-    const radius = baseRadius * (isHover || isSelected ? 1.25 : 1);
-
-    // Pick color — user nodes follow the user palette; project/product/task
-    // each have their own colour from the cool-spectrum ramp.
-    let colors: { fill: string; glow: string };
-    if (node.type === "user") {
-      if (isMulti && node.user_key) {
-        colors = userColorByKey.get(node.user_key) || palette.user;
-      } else {
-        colors = palette.user;
-      }
-    } else if (node.type === "project") {
-      colors = palette.project;
-    } else if (node.type === "product") {
-      colors = palette.product;
-    } else {
-      colors = palette.task;
-    }
-
-    const sharedCount = sharedCountById.get(node.id) ?? 0;
-    const isShared = node.type !== "user" && sharedCount >= 2;
-    const alpha = focused ? 1 : 0.18;
-
-    if (focused) {
-      const grad = ctx.createRadialGradient(x, y, radius * 0.6, x, y, radius * 3.4);
-      grad.addColorStop(0, colors.glow);
-      grad.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(x, y, radius * 3.4, 0, 2 * Math.PI, false);
-      ctx.fill();
-    }
-
-    ctx.globalAlpha = alpha;
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, 2 * Math.PI, false);
-    ctx.fillStyle = colors.fill;
-    ctx.fill();
-
-    // Halo ring for shared items.
-    if (isShared) {
-      ctx.lineWidth = 2 / globalScale;
-      ctx.strokeStyle = palette.haloStroke;
-      ctx.beginPath();
-      ctx.arc(x, y, radius + 3 / globalScale, 0, 2 * Math.PI, false);
-      ctx.stroke();
-    }
-
-    if (isHover || isSelected) {
-      ctx.lineWidth = 2 / globalScale;
-      ctx.strokeStyle = palette.hoverStroke;
-      ctx.beginPath();
-      ctx.arc(x, y, radius + 1 / globalScale, 0, 2 * Math.PI, false);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
-
-    // Badge with shared count for shared items.
-    if (isShared) {
-      const badgeRadius = 7 / globalScale;
-      const bx = x + radius * 0.95;
-      const by = y - radius * 0.95;
-      ctx.beginPath();
-      ctx.arc(bx, by, badgeRadius, 0, 2 * Math.PI, false);
-      ctx.fillStyle = palette.badgeBg;
-      ctx.fill();
-      ctx.fillStyle = palette.badgeText;
-      ctx.font = `700 ${Math.max(8, 9 / globalScale)}px Inter, system-ui, sans-serif`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillText(String(sharedCount), bx, by + 0.5 / globalScale);
-    }
-
-    // Label — size mirrors the node hierarchy.
-    const label = node.label || "—";
-    const fontSize =
-      node.type === "user"
-        ? 22 / globalScale
-        : node.type === "project"
-          ? 14 / globalScale
-          : node.type === "product"
-            ? 10.5 / globalScale
-            : 8 / globalScale; // task
-    ctx.font = `${node.type === "user" ? "700" : node.type === "project" ? "600" : "500"} ${fontSize}px Inter, system-ui, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
-    ctx.fillStyle = focused ? palette.labelActive : palette.labelDim;
-    const truncated = label.length > 36 ? `${label.slice(0, 33)}…` : label;
-    ctx.fillText(truncated, x, y + radius + 4 / globalScale);
-  };
-
-  const linkColor = (link: GraphLink): string => {
-    // In multi mode, user-origin links carry the user's palette color.
-    if (isMulti && (link.kind === "user_project" || link.kind === "user_product" || link.kind === "user_task")) {
-      const sourceId = nodeId(link.source);
-      // user_project edges have source=user, target=project. Find user_key from id.
-      const sourceNode = baseGraphData.nodes.find((n) => n.id === sourceId);
-      const userKey = sourceNode?.user_key;
-      if (userKey) {
-        const c = userColorByKey.get(userKey);
-        if (c) {
-          if (!hoveredId) return withAlpha(c.fill, 0.55);
-          return isLinkActive(link) ? withAlpha(c.fill, 0.7) : withAlpha(c.fill, 0.06);
-        }
-      }
-    }
-    if (!hoveredId) return palette.link;
-    return isLinkActive(link) ? palette.link : palette.linkDim;
-  };
-
-  const linkWidth = (link: GraphLink): number => (isLinkActive(link) ? 1.6 : 0.6);
-
-  const handleNodeHover = (node: GraphNode | null) => {
-    setHoveredId(node ? node.id : null);
-    if (containerRef.current) {
-      containerRef.current.style.cursor = node ? "pointer" : "default";
-    }
-  };
+  // Canvas-side helpers removed — `CanvasGraph` (SVG) handles rendering, layout,
+  // hover/select interactions, and bounds computation internally.
+  void adjacency;
+  void hoveredId;
+  void palette;
 
   const summary = canvasQuery.data?.summary;
   const allUserOptions = usersQuery.data?.users || [];
@@ -610,68 +348,7 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
 
   const clearSelection = () => setSelectedUserKeys([]);
 
-  const resetView = () => {
-    const fg = graphRef.current;
-    if (!fg) return;
-    fg.zoomToFit?.(700, 140);
-  };
-
-  const reorganize = () => {
-    const fg = graphRef.current;
-    if (!fg) return;
-    const nodes = graphData.nodes;
-    if (nodes.length === 0) return;
-
-    const userNodes = nodes.filter((n) => n.type === "user");
-    const otherNodes = nodes.filter((n) => n.type !== "user");
-    const userCount = Math.max(1, userNodes.length);
-    const ringRadius = Math.max(200, 90 * userCount);
-
-    userNodes.forEach((n, i) => {
-      const angle = (2 * Math.PI * i) / userCount - Math.PI / 2;
-      n.x = Math.cos(angle) * ringRadius;
-      n.y = Math.sin(angle) * ringRadius;
-      n.vx = 0;
-      n.vy = 0;
-    });
-
-    const userPosById = new Map<string, { x: number; y: number }>();
-    userNodes.forEach((n) => {
-      if (Number.isFinite(n.x) && Number.isFinite(n.y)) {
-        userPosById.set(n.id, { x: n.x as number, y: n.y as number });
-      }
-    });
-
-    otherNodes.forEach((n) => {
-      const neighbors = adjacency.get(n.id);
-      let sumX = 0;
-      let sumY = 0;
-      let cnt = 0;
-      if (neighbors) {
-        neighbors.forEach((id) => {
-          const p = userPosById.get(id);
-          if (p) {
-            sumX += p.x;
-            sumY += p.y;
-            cnt += 1;
-          }
-        });
-      }
-      const jitter = () => (Math.random() - 0.5) * 100;
-      if (cnt > 0) {
-        n.x = sumX / cnt + jitter();
-        n.y = sumY / cnt + jitter();
-      } else {
-        n.x = (Math.random() - 0.5) * ringRadius * 1.6;
-        n.y = (Math.random() - 0.5) * ringRadius * 1.6;
-      }
-      n.vx = 0;
-      n.vy = 0;
-    });
-
-    fg.d3ReheatSimulation?.();
-    window.setTimeout(() => fg.zoomToFit?.(700, 140), 900);
-  };
+  // resetView/reorganize removed — SVG CanvasGraph auto-fits via viewBox.
 
   const selectedNode = useMemo(
     () => baseGraphData.nodes.find((n) => n.id === selectedNodeId) || null,
@@ -861,16 +538,8 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
           <div className="canvas-sidebar-section">
             <div className="canvas-sidebar-heading">Navegación</div>
             <p className="text-[11px] text-secondary leading-5">
-              Arrastrá un área vacía para mover el grafo. Scroll para zoom. Drag sobre un nodo para moverlo.
+              Hover sobre un nodo resalta sus conexiones. Click fija el detalle. Click vacío deselecciona.
             </p>
-            <div className="flex flex-col gap-2">
-              <button type="button" className="canvas-mini-button" onClick={reorganize}>
-                Reorganizar nodos
-              </button>
-              <button type="button" className="canvas-mini-button" onClick={resetView}>
-                Centrar y ajustar zoom
-              </button>
-            </div>
           </div>
 
           <div className="canvas-sidebar-section">
@@ -921,65 +590,57 @@ export function Canvas({ currentUser }: { currentUser: AuthUser | null }) {
         </svg>
       </button>
 
-      <section className="canvas-stage" style={{ backgroundColor: palette.background }}>
+      <section className="canvas-stage">
         <div ref={containerRef} className="absolute inset-0">
           {canvasQuery.isLoading ? (
             <div
               className="absolute inset-0 grid place-items-center text-sm"
-              style={{ color: resolvedTheme === "light" ? "#52525b" : "rgba(220,220,230,0.7)" }}
+              style={{ color: "var(--text-muted)" }}
             >
               Cargando grafo...
             </div>
           ) : canvasQuery.isError ? (
-            <div className="absolute inset-0 grid place-items-center text-sm text-red-400">
+            <div className="absolute inset-0 grid place-items-center text-sm" style={{ color: "var(--accent-text)" }}>
               No se pudo cargar el canvas.
             </div>
           ) : graphData.nodes.length === 0 ? (
             <div
               className="absolute inset-0 grid place-items-center text-sm"
-              style={{ color: resolvedTheme === "light" ? "#52525b" : "rgba(220,220,230,0.7)" }}
+              style={{ color: "var(--text-muted)" }}
             >
               No hay proyectos visibles para este usuario.
             </div>
           ) : (
-            <ForceGraph2D<GraphNode, GraphLink>
-              ref={graphRef}
-              graphData={graphData}
-              width={dimensions.w}
-              height={dimensions.h}
-              backgroundColor="rgba(0,0,0,0)"
-              cooldownTicks={250}
-              cooldownTime={10000}
-              d3AlphaDecay={0.022}
-              d3VelocityDecay={0.42}
-              warmupTicks={40}
-              nodeRelSize={6}
-              minZoom={0.08}
-              maxZoom={6}
-              nodeCanvasObject={drawNode}
-              nodeCanvasObjectMode={() => "replace"}
-              nodePointerAreaPaint={(node, color, ctx) => {
-                if (!Number.isFinite(node.x) || !Number.isFinite(node.y)) return;
-                ctx.fillStyle = color;
-                ctx.beginPath();
-                ctx.arc(node.x as number, node.y as number, nodeBaseRadius(node) + 4, 0, 2 * Math.PI, false);
-                ctx.fill();
+            <CanvasGraph
+              nodes={graphData.nodes as GraphNode[]}
+              edges={graphData.links.map((l) => ({
+                source: nodeId(l.source),
+                target: nodeId(l.target),
+                kind: l.kind,
+              })) as CanvasEdge[]}
+              layout={layoutMode === "hierarchy" ? "hierarchy" : "constellation"}
+              selectedNodeId={selectedNodeId}
+              onSelectNode={(id) => {
+                setSelectedNodeId(id);
+                if (!id) setHoveredId(null);
               }}
-              linkColor={linkColor}
-              linkWidth={linkWidth}
-              linkDirectionalParticles={(link) => (isLinkActive(link) ? 2 : 1)}
-              linkDirectionalParticleSpeed={() => 0.0035}
-              linkDirectionalParticleWidth={(link) => (isLinkActive(link) ? 2 : 1.1)}
-              linkDirectionalParticleColor={() => palette.particle}
-              onNodeHover={handleNodeHover}
-              onNodeClick={handleNodeClick}
-              onBackgroundClick={() => {
-                setHoveredId(null);
-                setSelectedNodeId(null);
-              }}
-              enableZoomInteraction
-              enablePanInteraction
-              enableNodeDrag
+              onHoverNode={(id) => setHoveredId(id)}
+              userColors={
+                isMulti
+                  ? new Map(
+                      Array.from(userColorByKey.entries()).map(([k, v]) => [k, v.fill])
+                    )
+                  : undefined
+              }
+              haloNodeIds={
+                isMulti
+                  ? new Set(
+                      Array.from(sharedCountById.entries())
+                        .filter(([, cnt]) => cnt >= 2)
+                        .map(([id]) => id)
+                    )
+                  : undefined
+              }
             />
           )}
         </div>

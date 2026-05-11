@@ -17,7 +17,7 @@ import { KPIPanel } from "../components/KPIPanel";
 import { ProductFilters, ProductsTable } from "../components/ProductsTable";
 import { ProjectTaskFilters, TasksByProduct } from "../components/TasksByProduct";
 import { TaskFilters, TasksPanel } from "../components/TasksPanel";
-import { Timeline } from "../components/Timeline";
+import { ProjectCronograma } from "../components/ProjectCronograma";
 import { formatDateLabel, personLabel, toTimeValue } from "../utils/display";
 import { exportProjectPdf } from "../utils/exportPdf";
 
@@ -244,12 +244,11 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
       onTabChange={setActiveTab}
     >
       {activeTab === "cronograma" && (
-        <Timeline
+        <ProjectCronograma
           data={timelineMode === "products" ? timelineProductsQuery.data : timelineTasksData}
           mode={timelineMode}
           onModeChange={handleTimelineMode}
           loading={timelineMode === "products" ? timelineProductsQuery.isLoading : projectTasksQuery.isLoading}
-          className="w-full"
         />
       )}
 

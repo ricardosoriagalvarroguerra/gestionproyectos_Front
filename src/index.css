@@ -3399,3 +3399,14 @@ body {
   border-radius: 3px;
 }
 
+
+/* Cronograma fullscreen mode (matches design's expand button). */
+.gp-cronograma-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: var(--bg-surface);
+  padding: 24px 28px;
+  overflow: auto;
+}
+
