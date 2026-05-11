@@ -90,39 +90,39 @@ const USER_PALETTE_LIGHT: { fill: string; glow: string }[] = [
   { fill: "#a85689", glow: "rgba(168, 86, 137, 0.22)" },
 ];
 
+// Notion-inspired palette: warm paper for light, ink for dark, single red accent.
+// Node hierarchy uses the design's blue (info) / green (success) / muted ramp.
 const DARK_PALETTE: Palette = {
-  background: "#000000",
-  user: { fill: USER_RED, glow: USER_RED_GLOW },
-  // Cool ramp on the indigo → blue → cyan family (vivid against black).
-  project: { fill: "#818cf8", glow: "rgba(129, 140, 248, 0.30)" }, // indigo-400
-  product: { fill: "#60a5fa", glow: "rgba(96, 165, 250, 0.28)" }, // blue-400
-  task: { fill: "#22d3ee", glow: "rgba(34, 211, 238, 0.26)" }, // cyan-400
-  link: "rgba(255, 255, 255, 0.22)",
-  linkDim: "rgba(255, 255, 255, 0.04)",
-  particle: "rgba(255, 255, 255, 0.7)",
-  labelActive: "rgba(240, 240, 245, 0.92)",
-  labelDim: "rgba(160, 160, 170, 0.32)",
-  hoverStroke: "rgba(255, 255, 255, 0.85)",
-  haloStroke: "rgba(255, 220, 0, 0.85)",
-  badgeBg: "#facc15",
-  badgeText: "#0a0a0a",
+  background: "#191918",
+  user: { fill: "#e94f4f", glow: "rgba(233, 79, 79, 0.45)" },
+  project: { fill: "#ededeb", glow: "rgba(237, 237, 235, 0.30)" },
+  product: { fill: "#7aa7ff", glow: "rgba(122, 167, 255, 0.30)" },
+  task: { fill: "#87857f", glow: "rgba(135, 133, 127, 0.30)" },
+  link: "rgba(255, 255, 255, 0.18)",
+  linkDim: "rgba(255, 255, 255, 0.05)",
+  particle: "rgba(255, 255, 255, 0.55)",
+  labelActive: "rgba(237, 237, 235, 0.95)",
+  labelDim: "rgba(184, 182, 176, 0.4)",
+  hoverStroke: "rgba(255, 255, 255, 0.75)",
+  haloStroke: "rgba(233, 79, 79, 0.85)",
+  badgeBg: "#e94f4f",
+  badgeText: "#ffffff",
 };
 
 const LIGHT_PALETTE: Palette = {
-  background: "#ffffff",
-  user: { fill: "#a4133c", glow: "rgba(164, 19, 60, 0.22)" },
-  // Same cool ramp, deeper tones so they stay legible (and soft) on white.
-  project: { fill: "#4338ca", glow: "rgba(67, 56, 202, 0.18)" }, // indigo-700
-  product: { fill: "#1d4ed8", glow: "rgba(29, 78, 216, 0.16)" }, // blue-700
-  task: { fill: "#0e7490", glow: "rgba(14, 116, 144, 0.16)" }, // cyan-700
-  link: "rgba(82, 82, 91, 0.30)",
-  linkDim: "rgba(82, 82, 91, 0.06)",
-  particle: "rgba(82, 82, 91, 0.55)",
-  labelActive: "rgba(39, 39, 42, 0.92)",
-  labelDim: "rgba(113, 113, 122, 0.42)",
-  hoverStroke: "rgba(63, 63, 70, 0.7)",
-  haloStroke: "rgba(217, 119, 6, 0.7)",
-  badgeBg: "#d97706",
+  background: "#fbfaf7",
+  user: { fill: "#b8312b", glow: "rgba(184, 49, 43, 0.20)" },
+  project: { fill: "#2b2b29", glow: "rgba(43, 43, 41, 0.20)" },
+  product: { fill: "#3b6db8", glow: "rgba(59, 109, 184, 0.18)" },
+  task: { fill: "#8a8884", glow: "rgba(138, 136, 132, 0.18)" },
+  link: "rgba(43, 43, 41, 0.20)",
+  linkDim: "rgba(43, 43, 41, 0.06)",
+  particle: "rgba(43, 43, 41, 0.50)",
+  labelActive: "rgba(43, 43, 41, 0.95)",
+  labelDim: "rgba(138, 136, 132, 0.45)",
+  hoverStroke: "rgba(43, 43, 41, 0.6)",
+  haloStroke: "rgba(184, 49, 43, 0.7)",
+  badgeBg: "#b8312b",
   badgeText: "#ffffff",
 };
 

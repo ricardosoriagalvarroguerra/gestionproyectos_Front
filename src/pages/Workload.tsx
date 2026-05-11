@@ -45,12 +45,28 @@ function groupUsersByArea(users: WorkloadUserRow[]) {
   return grouped;
 }
 
+function avatarColorClass(key: string): string {
+  const palette = ["color-1", "color-2", "color-3", "color-4", "color-5"];
+  const code = (key || "?").charCodeAt(0) || 0;
+  return palette[code % palette.length];
+}
+
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+}
+
 export function Workload({ currentUser }: { currentUser: AuthUser | null }) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth() + 1);
   const [search, setSearch] = useState("");
   const [onlyLoginUsers, setOnlyLoginUsers] = useState(true);
+  const [teamFilter, setTeamFilter] = useState<string>("all");
   const [collapsedAreas, setCollapsedAreas] = useState<Set<string>>(new Set());
   const [selectedUserKey, setSelectedUserKey] = useState<string | null>(null);
   const [profileUserKey, setProfileUserKey] = useState<string | null>(null);
@@ -70,7 +86,7 @@ export function Workload({ currentUser }: { currentUser: AuthUser | null }) {
     enabled: !!currentUser?.can_view_workload,
   });
 
-  const filteredUsers = useMemo(() => {
+  const baseUsers = useMemo(() => {
     const rows = workloadQuery.data?.users || [];
     const term = normalizeText(search);
     return rows.filter((row) => {
@@ -79,6 +95,18 @@ export function Workload({ currentUser }: { currentUser: AuthUser | null }) {
       return normalizeText(row.display_name).includes(term);
     });
   }, [onlyLoginUsers, search, workloadQuery.data?.users]);
+
+  const teamsAvailable = useMemo(() => {
+    const all = groupUsersByArea(workloadQuery.data?.users || []);
+    return ["all", ...all.map((g) => g.key)];
+  }, [workloadQuery.data?.users]);
+
+  const filteredUsers = useMemo(() => {
+    if (teamFilter === "all") return baseUsers;
+    const group = AREA_GROUPS.find((g) => g.key === teamFilter);
+    if (!group) return baseUsers;
+    return baseUsers.filter((u) => group.members.includes(u.user_key.toLowerCase()));
+  }, [baseUsers, teamFilter]);
 
   useEffect(() => {
     if (filteredUsers.length === 0) {
@@ -101,9 +129,7 @@ export function Workload({ currentUser }: { currentUser: AuthUser | null }) {
   useEffect(() => {
     if (!profileUserKey) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setProfileUserKey(null);
-      }
+      if (event.key === "Escape") setProfileUserKey(null);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -131,133 +157,426 @@ export function Workload({ currentUser }: { currentUser: AuthUser | null }) {
   );
 
   const weeksData = workloadQuery.data?.weeks || [];
+  const periodLabel = workloadQuery.data?.label || `${MONTHS[month - 1].label} ${year}`;
+
+  // Summary band metrics
+  const weeklyAvg = useMemo(() => {
+    if (filteredUsers.length === 0 || weeksData.length === 0) return 0;
+    const sum = filteredUsers.reduce(
+      (acc, u) => acc + u.weeks.reduce((s, c) => s + c.total, 0),
+      0
+    );
+    return Math.round(sum / (filteredUsers.length * weeksData.length));
+  }, [filteredUsers, weeksData.length]);
+
+  const overAssigned = useMemo(
+    () => filteredUsers.filter((u) => u.weeks.some((c) => c.total / totalMax > 0.75)).length,
+    [filteredUsers, totalMax]
+  );
+
+  const idle = useMemo(
+    () => filteredUsers.filter((u) => u.weeks.every((c) => c.total === 0)).length,
+    [filteredUsers]
+  );
+
+  const intensityColor = (value: number) => {
+    if (value === 0) return null;
+    const t = Math.min(1, value / totalMax);
+    if (t < 0.4) return "var(--info-soft)";
+    if (t < 0.75) return "var(--info)";
+    return "var(--accent)";
+  };
+
+  const teamLabelFor = (key: string): string => {
+    if (key === "all") return "Todos";
+    const g = AREA_GROUPS.find((x) => x.key === key);
+    return g ? g.label : key.toUpperCase();
+  };
 
   return (
-    <div className="gp-content min-h-full space-y-4 sm:space-y-5">
-      {/* Header */}
-      <section className="glass overflow-hidden px-5 py-5 sm:px-6 sm:py-6">
-        <p className="wl-overline">Cronograma ejecutivo</p>
-        <h1 className="wl-title">Carga semanal por usuario</h1>
-        <div className="wl-toolbar">
-          <div className="wl-toolbar-group">
-            <label className="wl-filter-label">
-              Mes
-              <select className="wl-select" value={month} onChange={(e) => setMonth(Number(e.target.value))}>
-                {MONTHS.map((item) => (
-                  <option key={item.value} value={item.value}>{item.label}</option>
-                ))}
-              </select>
-            </label>
-            <label className="wl-filter-label">
-              Año
-              <select className="wl-select" value={year} onChange={(e) => setYear(Number(e.target.value))}>
-                {Array.from({ length: 5 }, (_, index) => today.getFullYear() - 1 + index).map((value) => (
-                  <option key={value} value={value}>{value}</option>
-                ))}
-              </select>
-            </label>
+    <div className="gp-content">
+      <div className="page-eyebrow">Equipo · Carga semanal</div>
+      <h1 className="page-title">Carga semanal por usuario</h1>
+      <p className="page-subtitle">
+        Distribución de proyectos, productos y tareas por semana.{" "}
+        <span className="gp-muted">
+          {periodLabel} · {filteredUsers.length} usuarios visibles
+        </span>
+      </p>
+
+      {/* Controls row */}
+      <div className="gp-row" style={{ gap: 12, marginBottom: 18, flexWrap: "wrap" }}>
+        <div className="gp-row" style={{ gap: 6 }}>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Mes</span>
+          <select
+            className="ui-select"
+            style={{ width: 130, minHeight: 30, paddingRight: 28 }}
+            value={month}
+            onChange={(e) => setMonth(Number(e.target.value))}
+          >
+            {MONTHS.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+          <select
+            className="ui-select"
+            style={{ width: 92, minHeight: 30, paddingRight: 28 }}
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+          >
+            {Array.from({ length: 5 }, (_, i) => today.getFullYear() - 1 + i).map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="gp-row" style={{ gap: 6 }}>
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Equipo</span>
+          <div className="ui-segmented">
+            {teamsAvailable.map((t) => (
+              <button
+                key={t}
+                type="button"
+                className={`ui-segment ${teamFilter === t ? "is-active" : ""}`}
+                onClick={() => setTeamFilter(t)}
+              >
+                {teamLabelFor(t)}
+              </button>
+            ))}
           </div>
+        </div>
+        <span className="gp-spacer-flex" />
+        <input
+          className="ui-input"
+          style={{ width: 220, minHeight: 30 }}
+          placeholder="Filtrar usuarios…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <label
+          className="gp-row"
+          style={{
+            gap: 6,
+            fontSize: 12,
+            color: "var(--text-secondary)",
+            background: "var(--bg-muted)",
+            padding: "5px 10px",
+            borderRadius: 6,
+            cursor: "pointer",
+          }}
+        >
           <input
-            className="wl-search"
-            placeholder="Filtrar usuarios..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            type="checkbox"
+            checked={onlyLoginUsers}
+            onChange={(e) => setOnlyLoginUsers(e.target.checked)}
+            style={{ accentColor: "var(--accent)" }}
           />
-        </div>
-      </section>
+          Solo con acceso
+        </label>
+      </div>
 
-      {/* Grid */}
-      <section className="glass relative overflow-hidden">
-        <div className="wl-grid-header">
+      {/* Summary band */}
+      <div className="gp-card" style={{ padding: "16px 18px", marginBottom: 20 }}>
+        <div className="gp-row" style={{ gap: 24, flexWrap: "wrap" }}>
           <div>
-            <span className="wl-grid-title">{workloadQuery.data?.label || "Sin periodo"}</span>
-            <span className="wl-grid-count">{filteredUsers.length} usuarios</span>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Promedio del equipo
+            </div>
+            <div className="mono" style={{ fontSize: 24, fontWeight: 500 }}>
+              {weeklyAvg}
+              <span style={{ fontSize: 13, color: "var(--text-muted)" }}> ítems/sem</span>
+            </div>
+          </div>
+          <div style={{ height: 32, width: 1, background: "var(--border-muted)" }} />
+          <div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Sobre-asignados
+            </div>
+            <div className="mono" style={{ fontSize: 24, fontWeight: 500, color: "var(--accent-text)" }}>
+              {overAssigned}
+            </div>
+          </div>
+          <div style={{ height: 32, width: 1, background: "var(--border-muted)" }} />
+          <div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              Sin asignación
+            </div>
+            <div className="mono" style={{ fontSize: 24, fontWeight: 500, color: "var(--text-muted)" }}>
+              {idle}
+            </div>
+          </div>
+          <span className="gp-spacer-flex" />
+          <div className="gp-row" style={{ gap: 12, fontSize: 11.5, color: "var(--text-muted)" }}>
+            <div className="gp-row" style={{ gap: 4 }}>
+              <span style={{ width: 14, height: 10, background: "var(--info-soft)", borderRadius: 2 }} />
+              &lt;40%
+            </div>
+            <div className="gp-row" style={{ gap: 4 }}>
+              <span style={{ width: 14, height: 10, background: "var(--info)", borderRadius: 2 }} />
+              40-75%
+            </div>
+            <div className="gp-row" style={{ gap: 4 }}>
+              <span style={{ width: 14, height: 10, background: "var(--accent)", borderRadius: 2 }} />
+              &gt;75%
+            </div>
           </div>
         </div>
+      </div>
 
-        {workloadQuery.isLoading ? (
-          <div className="wl-empty">Cargando...</div>
-        ) : workloadQuery.isError ? (
-          <div className="wl-empty wl-empty--error">No se pudo cargar el cronograma de carga.</div>
-        ) : (
-          <div className="wl-scroll">
-            <table className="wl-table">
-              <thead>
-                <tr>
-                  <th className="wl-th wl-th--user">Usuario</th>
-                  {weeksData.map((week) => (
-                    <th key={week.id} className="wl-th wl-th--week">
-                      <span className="wl-th-week">{week.label}</span>
-                      <span className="wl-th-range">{week.range_label}</span>
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {areaGroups.map((area) => {
-                  const isCollapsed = collapsedAreas.has(area.key);
-                  return (
-                    <Fragment key={area.key}>
-                      <tr className="wl-area-row" onClick={() => toggleArea(area.key)}>
-                        <td className="wl-td wl-td--area" colSpan={weeksData.length + 1}>
-                          <span className={`wl-area-toggle ${isCollapsed ? "is-collapsed" : ""}`}>
-                            <svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor">
-                              <path d="M3 2l4 3-4 3z" />
-                            </svg>
-                          </span>
-                          <span className="wl-area-label">{area.label}</span>
-                          <span className="wl-area-count">{area.users.length}</span>
-                        </td>
-                      </tr>
-                      {!isCollapsed && area.users.map((user) => {
-                        const isSelected = selectedUserKey === user.user_key;
-                        const initials = user.display_name.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+      {/* Gantt timeline */}
+      <div className="gp-card" style={{ overflow: "hidden" }}>
+        {workloadQuery.isLoading && (
+          <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
+            Cargando…
+          </div>
+        )}
+        {workloadQuery.isError && (
+          <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--accent-text)", fontSize: 13 }}>
+            No se pudo cargar el cronograma de carga.
+          </div>
+        )}
+
+        {!workloadQuery.isLoading && !workloadQuery.isError && weeksData.length > 0 && (
+          <div style={{ overflowX: "auto" }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: `220px repeat(${weeksData.length}, minmax(96px, 1fr))`,
+                minWidth: 220 + weeksData.length * 96,
+              }}
+            >
+              {/* Header row */}
+              <div
+                style={{
+                  background: "var(--bg-muted)",
+                  borderBottom: "1px solid var(--border-muted)",
+                  padding: "10px 14px",
+                  fontSize: 11,
+                  fontWeight: 500,
+                  color: "var(--text-muted)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                }}
+              >
+                Usuario
+              </div>
+              {weeksData.map((w) => (
+                <div
+                  key={w.id}
+                  style={{
+                    background: "var(--bg-muted)",
+                    borderLeft: "1px solid var(--border-muted)",
+                    borderBottom: "1px solid var(--border-muted)",
+                    padding: "10px 14px",
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 500 }}>{w.label}</div>
+                  <div className="mono" style={{ fontSize: 10.5, color: "var(--text-muted)" }}>
+                    {w.range_label}
+                  </div>
+                </div>
+              ))}
+
+              {areaGroups.map((area) => {
+                const isCollapsed = collapsedAreas.has(area.key);
+                const totals = weeksData.map((_, i) =>
+                  area.users.reduce((sum, u) => sum + (u.weeks[i]?.total ?? 0), 0)
+                );
+                return (
+                  <Fragment key={area.key}>
+                    {/* Team aggregate row */}
+                    <button
+                      type="button"
+                      onClick={() => toggleArea(area.key)}
+                      style={{
+                        background: "var(--bg-muted)",
+                        borderBottom: "1px solid var(--border-muted)",
+                        padding: "8px 14px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        border: "none",
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        color: "var(--text-secondary)",
+                        textAlign: "left",
+                      }}
+                    >
+                      <svg
+                        width="10"
+                        height="10"
+                        viewBox="0 0 18 18"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{ transform: isCollapsed ? "rotate(0deg)" : "rotate(90deg)", transition: "transform 0.15s" }}
+                      >
+                        <path d="m6 4 4 4-4 4" />
+                      </svg>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 500,
+                          color: "var(--text-secondary)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.05em",
+                        }}
+                      >
+                        {area.label}
+                      </span>
+                      <span className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                        {area.users.length}
+                      </span>
+                    </button>
+                    {totals.map((t, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          background: "var(--bg-muted)",
+                          borderLeft: "1px solid var(--border-muted)",
+                          borderBottom: "1px solid var(--border-muted)",
+                          padding: "8px 14px",
+                          display: "flex",
+                          alignItems: "center",
+                        }}
+                      >
+                        <span className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                          {t}
+                        </span>
+                      </div>
+                    ))}
+
+                    {/* User rows */}
+                    {!isCollapsed &&
+                      area.users.map((u) => {
+                        const isSelected = selectedUserKey === u.user_key;
                         return (
-                          <tr key={user.user_key} className={`wl-row ${isSelected ? "is-selected" : ""}`}>
-                            <td className="wl-td wl-td--user">
+                          <Fragment key={u.user_key}>
+                            <div
+                              style={{
+                                padding: "6px 14px",
+                                borderBottom: "1px solid var(--border-muted)",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                                background: isSelected ? "var(--bg-muted)" : "transparent",
+                              }}
+                            >
                               <button
                                 type="button"
-                                className="wl-user-btn"
-                                onClick={() => { setSelectedUserKey(user.user_key); setProfileUserKey(user.user_key); }}
+                                onClick={() => {
+                                  setSelectedUserKey(u.user_key);
+                                  setProfileUserKey(u.user_key);
+                                }}
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                  background: "transparent",
+                                  border: "none",
+                                  cursor: "pointer",
+                                  padding: 0,
+                                  fontFamily: "inherit",
+                                  color: "var(--text-primary)",
+                                  width: "100%",
+                                  minWidth: 0,
+                                }}
                               >
-                                <span className="wl-avatar-sm">{initials}</span>
-                                <span className="wl-user-info">
-                                  <span className="wl-user-name">{user.display_name}</span>
+                                <span className={`gp-avatar ${avatarColorClass(u.user_key)}`} style={{ width: 22, height: 22 }}>
+                                  {initialsOf(u.display_name)}
+                                </span>
+                                <span className="gp-truncate" style={{ fontSize: 13 }}>
+                                  {u.display_name}
+                                  {u.user_key === currentUser?.user_key && (
+                                    <span style={{ color: "var(--text-muted)" }}> · tú</span>
+                                  )}
                                 </span>
                               </button>
-                            </td>
-                            {user.weeks.map((cell) => {
-                              const intensity = cell.total > 0 ? Math.max(0.10, cell.total / totalMax) : 0;
-                              const isHigh = cell.total / totalMax > 0.7;
+                            </div>
+                            {u.weeks.map((cell, i) => {
+                              const week = weeksData[i];
+                              const pct = totalMax > 0 ? Math.min(1, cell.total / totalMax) : 0;
+                              const fill = intensityColor(cell.total);
                               return (
-                                <td key={cell.week_id} className="wl-td wl-td--cell">
-                                  <div
-                                    className={`wl-cell ${cell.total > 0 ? "is-active" : "is-empty"} ${isHigh ? "is-high" : ""}`}
-                                    onMouseEnter={(event) =>
-                                      setTooltip(buildTooltipState(event, user.display_name, cell, weeksData))
-                                    }
-                                    onMouseMove={(event) =>
-                                      setTooltip(buildTooltipState(event, user.display_name, cell, weeksData))
-                                    }
-                                    onMouseLeave={() => setTooltip(null)}
-                                    style={cell.total > 0 ? {
-                                      background: `rgba(35, 131, 226, ${intensity})`,
-                                      borderColor: `rgba(35, 131, 226, ${Math.min(0.4, intensity + 0.12)})`,
-                                    } : undefined}
-                                  />
-                                </td>
+                                <div
+                                  key={cell.week_id}
+                                  style={{
+                                    borderLeft: "1px solid var(--border-muted)",
+                                    borderBottom: "1px solid var(--border-muted)",
+                                    padding: "6px 8px",
+                                    height: 38,
+                                    display: "flex",
+                                    alignItems: "center",
+                                  }}
+                                >
+                                  {cell.total > 0 && fill ? (
+                                    <div
+                                      onMouseEnter={(e) =>
+                                        setTooltip(buildTooltipState(e, u.display_name, cell, weeksData))
+                                      }
+                                      onMouseMove={(e) =>
+                                        setTooltip(buildTooltipState(e, u.display_name, cell, weeksData))
+                                      }
+                                      onMouseLeave={() => setTooltip(null)}
+                                      style={{
+                                        width: "100%",
+                                        height: 18,
+                                        background: "var(--bg-muted)",
+                                        borderRadius: 4,
+                                        position: "relative",
+                                        overflow: "hidden",
+                                        cursor: "pointer",
+                                      }}
+                                      title={week ? `${week.label} · ${cell.total} ítems` : `${cell.total}`}
+                                    >
+                                      <div
+                                        style={{
+                                          width: `${Math.min(100, pct * 100)}%`,
+                                          height: "100%",
+                                          background: fill,
+                                          borderRadius: 4,
+                                        }}
+                                      />
+                                      <span
+                                        className="mono"
+                                        style={{
+                                          position: "absolute",
+                                          inset: 0,
+                                          display: "grid",
+                                          placeItems: "center",
+                                          fontSize: 10.5,
+                                          color: pct > 0.5 ? "white" : "var(--text-secondary)",
+                                          fontWeight: 500,
+                                          pointerEvents: "none",
+                                        }}
+                                      >
+                                        {cell.total}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="mono" style={{ fontSize: 11, color: "var(--text-faint)" }}>
+                                      —
+                                    </span>
+                                  )}
+                                </div>
                               );
                             })}
-                          </tr>
+                          </Fragment>
                         );
                       })}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </Fragment>
+                );
+              })}
+            </div>
             {filteredUsers.length === 0 && (
-              <div className="wl-empty">No hay usuarios para el filtro actual.</div>
+              <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
+                No hay usuarios para el filtro actual.
+              </div>
             )}
           </div>
         )}
@@ -269,14 +588,10 @@ export function Workload({ currentUser }: { currentUser: AuthUser | null }) {
             <WorkloadTooltipCard tooltip={tooltip} />
           </div>
         )}
-      </section>
+      </div>
 
       {profileUser && (
-        <WorkloadProfileModal
-          user={profileUser}
-          weeks={weeksData}
-          onClose={() => setProfileUserKey(null)}
-        />
+        <WorkloadProfileModal user={profileUser} weeks={weeksData} onClose={() => setProfileUserKey(null)} />
       )}
     </div>
   );
@@ -321,9 +636,7 @@ function summarizeUserWorkload(user: WorkloadUserRow, weeks: WorkloadOverviewRes
   let busiestWeekLabel = "";
 
   user.weeks.forEach((cell, index) => {
-    if (cell.total > 0) {
-      activeWeeks += 1;
-    }
+    if (cell.total > 0) activeWeeks += 1;
     if (cell.total > maxWeeklyLoad) {
       maxWeeklyLoad = cell.total;
       busiestWeekLabel = weeks[index]?.label || cell.week_id;
@@ -340,9 +653,9 @@ function summarizeUserWorkload(user: WorkloadUserRow, weeks: WorkloadOverviewRes
     activeWeeks,
     maxWeeklyLoad,
     busiestWeekLabel,
-    uniqueProjects: [...uniqueProjects].sort((left, right) => left.localeCompare(right)),
-    uniqueProducts: [...uniqueProducts].sort((left, right) => left.localeCompare(right)),
-    uniqueTasks: [...uniqueTasks].sort((left, right) => left.localeCompare(right)),
+    uniqueProjects: [...uniqueProjects].sort((l, r) => l.localeCompare(r)),
+    uniqueProducts: [...uniqueProducts].sort((l, r) => l.localeCompare(r)),
+    uniqueTasks: [...uniqueTasks].sort((l, r) => l.localeCompare(r)),
     topProjects: getTopItems(projectFrequency),
     topProducts: getTopItems(productFrequency),
     topTasks: getTopItems(taskFrequency),
@@ -355,7 +668,7 @@ function incrementItems(counter: Map<string, number>, items: string[]) {
 
 function getTopItems(counter: Map<string, number>, limit = 3) {
   return [...counter.entries()]
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+    .sort((l, r) => r[1] - l[1] || l[0].localeCompare(r[0]))
     .slice(0, limit)
     .map(([name, count]) => ({ name, count }));
 }
@@ -370,12 +683,7 @@ function WorkloadProfileModal({
   onClose: () => void;
 }) {
   const summary = useMemo(() => summarizeUserWorkload(user, weeks), [user, weeks]);
-  const initials = user.display_name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
+  const initials = initialsOf(user.display_name);
 
   return (
     <div className="wpm-backdrop" onClick={onClose}>
@@ -386,19 +694,16 @@ function WorkloadProfileModal({
         aria-modal="true"
         aria-label={`Resumen de carga de ${user.display_name}`}
       >
-        {/* Cover band */}
         <div className="wpm-cover">
           <button type="button" className="wpm-close" onClick={onClose}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M1 1l12 12M13 1 1 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M1 1l12 12M13 1 1 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
           </button>
         </div>
-
-        {/* Avatar overlapping the cover */}
         <div className="wpm-avatar-row">
-          <div className="wpm-avatar">{initials}</div>
+          <div className={`wpm-avatar ${avatarColorClass(user.user_key)}`}>{initials}</div>
         </div>
-
-        {/* Content */}
         <div className="wpm-content">
           <h2 className="wpm-name">{user.display_name}</h2>
           <div className="wpm-meta">
@@ -412,10 +717,11 @@ function WorkloadProfileModal({
             ) : (
               <span className="wpm-tag">Sin carga en el mes</span>
             )}
-            <span className="wpm-tag">{summary.activeWeeks} de {weeks.length} semanas activas</span>
+            <span className="wpm-tag">
+              {summary.activeWeeks} de {weeks.length} semanas activas
+            </span>
           </div>
 
-          {/* Stats row */}
           <div className="wpm-stats-row">
             <WpmStat label="Proyectos" value={summary.uniqueProjects.length} tone="project" />
             <WpmStat label="Productos" value={summary.uniqueProducts.length} tone="product" />
@@ -424,9 +730,8 @@ function WorkloadProfileModal({
 
           <div className="wpm-divider" />
 
-          {/* Chart section */}
           <div className="wpm-section">
-            <h3 className="wpm-section-title">Distribucion semanal</h3>
+            <h3 className="wpm-section-title">Distribución semanal</h3>
             <div className="wpm-legend">
               <WpmLegendDot label="Proyecto" tone="project" />
               <WpmLegendDot label="Producto" tone="product" />
@@ -441,12 +746,13 @@ function WorkloadProfileModal({
                 return (
                   <div key={week.id} className="wpm-chart-col">
                     <div className="wpm-chart-bar-area">
-                      <div
-                        className={`wpm-chart-bar ${cell.total > 0 ? "is-active" : ""}`}
-                        style={{ height: `${barH}%` }}
-                      >
-                        {cell.projects > 0 && <div className="wpm-seg is-project" style={{ flexGrow: cell.projects }} />}
-                        {cell.products > 0 && <div className="wpm-seg is-product" style={{ flexGrow: cell.products }} />}
+                      <div className={`wpm-chart-bar ${cell.total > 0 ? "is-active" : ""}`} style={{ height: `${barH}%` }}>
+                        {cell.projects > 0 && (
+                          <div className="wpm-seg is-project" style={{ flexGrow: cell.projects }} />
+                        )}
+                        {cell.products > 0 && (
+                          <div className="wpm-seg is-product" style={{ flexGrow: cell.products }} />
+                        )}
                         {cell.tasks > 0 && <div className="wpm-seg is-task" style={{ flexGrow: cell.tasks }} />}
                       </div>
                     </div>
@@ -461,7 +767,6 @@ function WorkloadProfileModal({
 
           <div className="wpm-divider" />
 
-          {/* Focus section */}
           <div className="wpm-section">
             <h3 className="wpm-section-title">Foco principal</h3>
             <p className="wpm-section-desc">Elementos con mayor presencia en el cronograma del mes.</p>
@@ -495,7 +800,15 @@ function WpmLegendDot({ label, tone }: { label: string; tone: "project" | "produ
   );
 }
 
-function WpmFocusCol({ label, items, tone }: { label: string; items: { name: string; count: number }[]; tone: string }) {
+function WpmFocusCol({
+  label,
+  items,
+  tone,
+}: {
+  label: string;
+  items: { name: string; count: number }[];
+  tone: string;
+}) {
   return (
     <div className="wpm-focus-col">
       <div className="wpm-focus-heading">{label}</div>
@@ -533,14 +846,12 @@ function WorkloadTooltipCard({
           {tooltip.weekLabel} · {tooltip.rangeLabel}
         </div>
       </div>
-
       <div className="flex flex-wrap items-center gap-1">
         <span className="timeline-focus-badge">Total {tooltip.cell.total}</span>
         <span className="timeline-focus-badge">Tareas {tooltip.cell.tasks}</span>
         <span className="timeline-focus-badge">Productos {tooltip.cell.products}</span>
         <span className="timeline-focus-badge">Proyectos {tooltip.cell.projects}</span>
       </div>
-
       <TooltipGroup label="Proyectos" items={tooltip.cell.project_names} />
       <TooltipGroup label="Productos" items={tooltip.cell.product_names} />
       <TooltipGroup label="Tareas" items={tooltip.cell.task_names} />

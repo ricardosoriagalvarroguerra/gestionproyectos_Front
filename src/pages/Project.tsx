@@ -30,7 +30,7 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
   const [productFilters, setProductFilters] = useState<ProductFilters>({});
   const [taskFilters, setTaskFilters] = useState<TaskFilters>({});
   const [projectTaskFilters, setProjectTaskFilters] = useState<ProjectTaskFilters>({});
-  const [listTab, setListTab] = useState<"products" | "tasks">("products");
+  const [activeTab, setActiveTab] = useState<"cronograma" | "productos" | "tareas">("cronograma");
   const [timelineMode, setTimelineMode] = useState<"products" | "tasks">("products");
   const [toast, setToast] = useState<string | null>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -71,7 +71,7 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
   useEffect(() => {
     if (productIdParam) {
       setSelectedProductId(productIdParam);
-      setListTab("products");
+      setActiveTab("productos");
     }
   }, [productIdParam]);
 
@@ -213,219 +213,351 @@ export function Project({ currentUser }: { currentUser: AuthUser | null }) {
   }
 
   return (
-    <div className="gp-content min-h-full overflow-hidden flex flex-col gap-4">
-      <div className="glass relative overflow-hidden p-4 sm:p-5">
-        <div className="flex flex-col gap-5">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0 space-y-3">
-              <div className="flex items-center gap-2 text-[11px] text-secondary">
-                <Link to="/home" className="ui-link ui-link--subtle">
-                  Proyectos
-                </Link>
-                <span>/</span>
-                <span>Detalle</span>
-              </div>
-              <div className="space-y-2">
-                <h1 className="max-w-5xl break-words text-[34px] leading-[1.02] font-semibold sm:text-[42px]">
-                  {project?.nombre || "Proyecto"}
-                </h1>
-                <p className="max-w-2xl text-sm text-secondary">
-                  {projectPeriodLabel(project?.fecha_start, project?.fecha_end)}
-                </p>
-                {currentUser && !currentUser.can_view_all ? (
-                  <p className="max-w-2xl text-xs text-secondary">
-                    Vista filtrada para {currentUser.display_name}. Solo se muestran productos y tareas
-                    donde estás involucrado.
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="ui-badge ui-badge--neutral">
-                  {productsQuery.data?.length ?? project.products_total ?? 0} productos
-                </span>
-                <span className="ui-badge ui-badge--neutral">
-                  {projectTasksQuery.data?.length ?? project.tasks_total ?? 0} tareas
-                </span>
-                {dashboardQuery.data?.kpis?.tasks_overdue ? (
-                  <span className="ui-badge ui-badge--danger">
-                    {dashboardQuery.data.kpis.tasks_overdue} vencidas
-                  </span>
-                ) : null}
-              </div>
-              {project.extra_properties && Object.keys(project.extra_properties).length > 0 ? (
-                <div className="pt-1">
-                  <div className="mb-2 text-[10px] uppercase tracking-[0.18em] text-secondary">
-                    Propiedades adicionales
-                  </div>
-                  <PropertyGrid properties={project.extra_properties} />
-                </div>
-              ) : null}
-            </div>
+    <ProjectLayout
+      project={project}
+      currentUser={currentUser}
+      productsCount={productsQuery.data?.length ?? project.products_total ?? 0}
+      tasksCount={projectTasksQuery.data?.length ?? project.tasks_total ?? 0}
+      overdueCount={dashboardQuery.data?.kpis?.tasks_overdue ?? project.tasks_overdue ?? 0}
+      dashboard={dashboardQuery.data}
+      search={productFilters.search || ""}
+      onSearch={(term) => {
+        setProductFilters({ ...productFilters, search: term });
+        setTaskFilters({ ...taskFilters, search: term });
+        setProjectTaskFilters({ ...projectTaskFilters, search: term });
+      }}
+      onOpenNotion={() => project?.notion_url && window.open(project.notion_url, "_blank")}
+      onExportCsv={exportCsv}
+      onExportPdf={exportPdf}
+      canExportCsv={!!selectedProductTasks.length}
+      isExporting={isExporting}
+      canSync={!!currentUser?.can_view_workload}
+      isSyncing={syncMutation.isPending}
+      onSync={() => syncMutation.mutate()}
+      toast={toast}
+      provisionedUsers={provisionedUsers}
+      onDismissProvisioned={() => setProvisionedUsers([])}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+    >
+      {activeTab === "cronograma" && (
+        <Timeline
+          data={timelineMode === "products" ? timelineProductsQuery.data : timelineTasksData}
+          mode={timelineMode}
+          onModeChange={handleTimelineMode}
+          loading={timelineMode === "products" ? timelineProductsQuery.isLoading : projectTasksQuery.isLoading}
+          className="w-full"
+        />
+      )}
 
-            <div className="flex w-full min-w-0 flex-col gap-2 lg:w-auto lg:min-w-[320px]">
-              <input
-                placeholder="Buscar producto o tarea..."
-                className="ui-input w-full"
-                value={productFilters.search || ""}
-                onChange={(e) => {
-                  const term = e.target.value;
-                  setProductFilters({ ...productFilters, search: term });
-                  setTaskFilters({ ...taskFilters, search: term });
-                  setProjectTaskFilters({ ...projectTaskFilters, search: term });
-                }}
-              />
-              <div className="proj-actions">
-                <button
-                  className="proj-action-btn"
-                  onClick={() => project?.notion_url && window.open(project.notion_url, "_blank")}
-                  disabled={!project?.notion_url}
-                  title="Abrir en Notion"
-                >
-                  <NotionIcon className="proj-action-icon" />
-                </button>
-                <details className="proj-export-menu">
-                  <summary className="proj-action-btn">
-                    <ExportIcon className="proj-action-icon" />
-                    <span>Exportar</span>
-                  </summary>
-                  <div className="proj-export-panel">
-                    <button
-                      type="button"
-                      className="proj-export-item"
-                      onClick={exportCsv}
-                      disabled={!selectedProductTasks.length}
-                    >
-                      <CsvIcon className="proj-export-item-icon" />
-                      CSV
-                    </button>
-                    <button
-                      type="button"
-                      className="proj-export-item"
-                      onClick={exportPdf}
-                      disabled={isExporting}
-                    >
-                      <PdfIcon className="proj-export-item-icon" />
-                      {isExporting ? "Generando..." : "PDF"}
-                    </button>
-                  </div>
-                </details>
-                {currentUser?.can_view_workload ? (
-                  <button
-                    className="proj-action-btn proj-action-btn--sync"
-                    onClick={() => syncMutation.mutate()}
-                    disabled={syncMutation.isPending}
-                    title="Sincronizar con Notion"
-                  >
-                    <RefreshIcon className={`proj-action-icon ${syncMutation.isPending ? "animate-spin" : ""}`} />
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-
-          {toast && <div className="ui-badge ui-badge--accent w-fit">{toast}</div>}
-          {provisionedUsers.length ? (
-            <div className="glass border border-[rgba(35,131,226,0.16)] bg-[rgba(35,131,226,0.06)] p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-secondary">Accesos nuevos</div>
-                  <div className="text-sm text-primary">Comparte estas contraseñas temporales ahora. No quedan guardadas en la base.</div>
-                </div>
-                <button type="button" className="ui-button ui-button--ghost" onClick={() => setProvisionedUsers([])}>
-                  Cerrar
-                </button>
-              </div>
-              <div className="mt-3 overflow-auto">
-                <table className="ui-table w-full text-[12px]">
-                  <thead>
-                    <tr>
-                      <th className="px-3 py-2 text-left">Usuario</th>
-                      <th className="px-3 py-2 text-left">Clave temporal</th>
-                      <th className="px-3 py-2 text-left">Permiso</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {provisionedUsers.map((user) => (
-                      <tr key={user.user_key} className="ui-table-row">
-                        <td className="px-3 py-2">
-                          <div className="font-medium">{user.display_name}</div>
-                          <div className="ui-table-meta">{user.user_key}</div>
-                        </td>
-                        <td className="px-3 py-2 font-mono">{user.temporary_password}</td>
-                        <td className="px-3 py-2">{user.can_view_workload ? "Admin carga" : "Usuario"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-3">
-        <KPIPanel data={dashboardQuery.data} />
-
-        <div className="flex flex-col gap-3 w-full min-w-0">
-          <Timeline
-            data={timelineMode === "products" ? timelineProductsQuery.data : timelineTasksData}
-            mode={timelineMode}
-            onModeChange={handleTimelineMode}
-            loading={timelineMode === "products" ? timelineProductsQuery.isLoading : projectTasksQuery.isLoading}
-            className="w-full"
+      {activeTab === "productos" && (
+        <div className="space-y-2">
+          <ProductsTable
+            products={productsQuery.data || []}
+            selectedId={selectedProductId}
+            onSelect={setSelectedProductId}
+            filters={productFilters}
+            onChangeFilters={setProductFilters}
           />
-
-          <div className="space-y-2">
-            <div className="ui-segmented">
-              <button
-                className={`ui-segment ${listTab === "products" ? "is-active" : ""}`}
-                onClick={() => setListTab("products")}
-              >
-                Productos
-              </button>
-              <button className={`ui-segment ${listTab === "tasks" ? "is-active" : ""}`} onClick={() => setListTab("tasks")}>
-                Tareas
-              </button>
+          {selectedProductId ? (
+            <TasksPanel
+              tasks={filteredTasks}
+              filters={taskFilters}
+              onChangeFilters={setTaskFilters}
+              highlightTaskId={taskIdParam}
+              productId={selectedProductId}
+              productName={productsQuery.data?.find((p) => p.product_id === selectedProductId)?.nombre || null}
+              projectId={projectId}
+            />
+          ) : (
+            <div
+              style={{
+                background: "var(--bg-panel)",
+                border: "1px solid var(--border-muted)",
+                borderRadius: 8,
+                padding: 14,
+                fontSize: 12.5,
+                color: "var(--text-muted)",
+              }}
+            >
+              Selecciona un producto para revisar sus tareas, bloqueos y fechas clave.
             </div>
+          )}
+        </div>
+      )}
 
-            {listTab === "products" ? (
-              <>
-                <ProductsTable
-                  products={productsQuery.data || []}
-                  selectedId={selectedProductId}
-                  onSelect={setSelectedProductId}
-                  filters={productFilters}
-                  onChangeFilters={setProductFilters}
-                />
-                {selectedProductId ? (
-                  <TasksPanel
-                    tasks={filteredTasks}
-                    filters={taskFilters}
-                    onChangeFilters={setTaskFilters}
-                    highlightTaskId={taskIdParam}
-                    productId={selectedProductId}
-                    productName={
-                      productsQuery.data?.find((p) => p.product_id === selectedProductId)?.nombre || null
-                    }
-                    projectId={projectId}
-                  />
-                ) : (
-                  <div className="glass p-3 text-xs text-secondary">
-                    Selecciona un producto para revisar sus tareas, bloqueos y fechas clave.
-                  </div>
-                )}
-              </>
-            ) : (
-              <TasksByProduct
-                tasks={projectTasksQuery.data || []}
-                products={productsQuery.data || []}
-                filters={projectTaskFilters}
-                onChangeFilters={setProjectTaskFilters}
-              />
+      {activeTab === "tareas" && (
+        <TasksByProduct
+          tasks={projectTasksQuery.data || []}
+          products={productsQuery.data || []}
+          filters={projectTaskFilters}
+          onChangeFilters={setProjectTaskFilters}
+        />
+      )}
+    </ProjectLayout>
+  );
+}
+
+type LayoutProps = {
+  project: ProjectType;
+  currentUser: AuthUser | null;
+  productsCount: number;
+  tasksCount: number;
+  overdueCount: number;
+  dashboard?: DashboardResponse;
+  search: string;
+  onSearch: (term: string) => void;
+  onOpenNotion: () => void;
+  onExportCsv: () => void;
+  onExportPdf: () => void;
+  canExportCsv: boolean;
+  isExporting: boolean;
+  canSync: boolean;
+  isSyncing: boolean;
+  onSync: () => void;
+  toast: string | null;
+  provisionedUsers: SyncProvisionedUser[];
+  onDismissProvisioned: () => void;
+  activeTab: "cronograma" | "productos" | "tareas";
+  onTabChange: (tab: "cronograma" | "productos" | "tareas") => void;
+  children: React.ReactNode;
+};
+
+function ProjectLayout({
+  project,
+  currentUser,
+  productsCount,
+  tasksCount,
+  overdueCount,
+  dashboard,
+  search,
+  onSearch,
+  onOpenNotion,
+  onExportCsv,
+  onExportPdf,
+  canExportCsv,
+  isExporting,
+  canSync,
+  isSyncing,
+  onSync,
+  toast,
+  provisionedUsers,
+  onDismissProvisioned,
+  activeTab,
+  onTabChange,
+  children,
+}: LayoutProps) {
+  return (
+    <div className="gp-content" style={{ maxWidth: 1320 }}>
+      <div className="page-eyebrow">
+        <Link
+          to="/home"
+          style={{
+            color: "var(--text-muted)",
+            cursor: "pointer",
+            textDecoration: "none",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+          }}
+        >
+          Proyectos
+        </Link>{" "}
+        / Detalle
+      </div>
+      <div className="gp-row" style={{ alignItems: "flex-start", marginTop: 4, gap: 16, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 280 }}>
+          <h1 className="page-title" style={{ marginBottom: 8 }}>
+            {project.nombre || "Proyecto"}
+          </h1>
+          <p className="page-subtitle" style={{ margin: 0 }}>
+            <span className="mono">{formatDate(project.fecha_start)}</span>
+            {" → "}
+            <span className="mono">{formatDate(project.fecha_end)}</span>
+          </p>
+          {currentUser && !currentUser.can_view_all ? (
+            <p className="gp-muted" style={{ fontSize: 12, marginTop: 8 }}>
+              Vista filtrada para {currentUser.display_name}. Solo se muestran productos y tareas donde estás involucrado.
+            </p>
+          ) : null}
+          <div className="gp-row" style={{ gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+            <span className="gp-pill">
+              <span className="dot" />
+              {productsCount} productos
+            </span>
+            <span className="gp-pill">
+              <span className="dot" />
+              {tasksCount} tareas
+            </span>
+            {overdueCount > 0 && (
+              <span className="gp-pill danger">{overdueCount} vencidas</span>
+            )}
+          </div>
+        </div>
+        <div style={{ width: 320, maxWidth: "100%" }}>
+          <div
+            className="gp-row"
+            style={{
+              background: "var(--bg-muted)",
+              borderRadius: 8,
+              padding: "6px 10px",
+              marginBottom: 8,
+              gap: 8,
+            }}
+          >
+            <svg width={14} height={14} viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="7.5" cy="7.5" r="4.5" />
+              <path d="m11 11 3 3" />
+            </svg>
+            <input
+              placeholder="Buscar producto o tarea…"
+              value={search}
+              onChange={(e) => onSearch(e.target.value)}
+              style={{
+                flex: 1,
+                border: "none",
+                background: "none",
+                outline: "none",
+                fontSize: 13,
+                color: "var(--text-primary)",
+                fontFamily: "inherit",
+                minHeight: 24,
+              }}
+            />
+          </div>
+          <div className="gp-row" style={{ gap: 6 }}>
+            <button
+              type="button"
+              className="gp-icon-btn"
+              onClick={onOpenNotion}
+              disabled={!project.notion_url}
+              title="Abrir en Notion"
+              style={{ opacity: project.notion_url ? 1 : 0.5 }}
+            >
+              <NotionIcon className="proj-action-icon" />
+            </button>
+            <details className="proj-export-menu">
+              <summary className="ui-button" style={{ height: 30, listStyle: "none" }}>
+                <ExportIcon className="proj-action-icon" />
+                <span>Exportar</span>
+              </summary>
+              <div className="proj-export-panel">
+                <button type="button" className="proj-export-item" onClick={onExportCsv} disabled={!canExportCsv}>
+                  <CsvIcon className="proj-export-item-icon" />
+                  CSV
+                </button>
+                <button type="button" className="proj-export-item" onClick={onExportPdf} disabled={isExporting}>
+                  <PdfIcon className="proj-export-item-icon" />
+                  {isExporting ? "Generando…" : "PDF"}
+                </button>
+              </div>
+            </details>
+            {canSync && (
+              <button
+                type="button"
+                className="ui-button"
+                style={{
+                  height: 30,
+                  marginLeft: "auto",
+                  background: "var(--accent)",
+                  borderColor: "var(--accent)",
+                  color: "white",
+                }}
+                onClick={onSync}
+                disabled={isSyncing}
+                title="Sincronizar con Notion"
+              >
+                <RefreshIcon className={`proj-action-icon ${isSyncing ? "animate-spin" : ""}`} />
+                Sincronizar
+              </button>
             )}
           </div>
         </div>
       </div>
+
+      {toast && (
+        <div
+          className="gp-pill info"
+          style={{ height: 24, padding: "0 10px", marginTop: 14, width: "fit-content" }}
+        >
+          {toast}
+        </div>
+      )}
+
+      {provisionedUsers.length > 0 && (
+        <div
+          className="gp-card"
+          style={{
+            marginTop: 12,
+            padding: 12,
+            background: "var(--info-soft)",
+            borderColor: "transparent",
+          }}
+        >
+          <div className="gp-row" style={{ justifyContent: "space-between", gap: 12 }}>
+            <div>
+              <div className="page-eyebrow">Accesos nuevos</div>
+              <div style={{ fontSize: 13, color: "var(--text-primary)" }}>
+                Comparte estas contraseñas temporales ahora. No quedan guardadas en la base.
+              </div>
+            </div>
+            <button type="button" className="ui-button ui-button--ghost" onClick={onDismissProvisioned}>
+              Cerrar
+            </button>
+          </div>
+          <div className="mt-3 overflow-auto">
+            <table className="ui-table w-full text-[12px]">
+              <thead>
+                <tr>
+                  <th>Usuario</th>
+                  <th>Clave temporal</th>
+                  <th>Permiso</th>
+                </tr>
+              </thead>
+              <tbody>
+                {provisionedUsers.map((user) => (
+                  <tr key={user.user_key} className="ui-table-row">
+                    <td>
+                      <div style={{ fontWeight: 500 }}>{user.display_name}</div>
+                      <div className="mono" style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                        {user.user_key}
+                      </div>
+                    </td>
+                    <td className="mono">{user.temporary_password}</td>
+                    <td>{user.can_view_workload ? "Admin carga" : "Usuario"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* KPI band */}
+      <div style={{ marginTop: 20 }}>
+        <KPIPanel data={dashboard} />
+      </div>
+
+      {/* Tabs */}
+      <div className="gp-tabs" style={{ marginTop: 24 }}>
+        {(
+          [
+            ["cronograma", "Cronograma"],
+            ["productos", "Productos"],
+            ["tareas", "Tareas"],
+          ] as ["cronograma" | "productos" | "tareas", string][]
+        ).map(([k, l]) => (
+          <button
+            key={k}
+            type="button"
+            className={`gp-tab ${activeTab === k ? "is-active" : ""}`}
+            onClick={() => onTabChange(k)}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-3 w-full min-w-0">{children}</div>
     </div>
   );
 }
